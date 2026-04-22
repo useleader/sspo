@@ -6,8 +6,11 @@ generates comparison tables matching paper format.
 Paper reference: Table 1 (page 8) and Table 2 (page 8) format.
 """
 import json
+import logging
 from pathlib import Path
 from typing import Optional
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 def aggregate_results(
@@ -55,7 +58,8 @@ def aggregate_results(
                 key = f"{model}_{method}"
                 aggregated["mtbench"][key] = data["average_score"]
 
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError) as e:
+            logging.warning(f"Skipping {result_file}: {e}")
             continue
 
     if output_path:

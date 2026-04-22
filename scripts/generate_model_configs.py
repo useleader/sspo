@@ -18,6 +18,10 @@ Paper configuration (from ADR-0006, ADR-0008):
 Usage:
     python scripts/generate_model_configs.py --output configs/
     python scripts/generate_model_configs.py --model mistral --output configs/
+
+Note:
+    Llama-3 models require HF_TOKEN environment variable:
+    export HF_TOKEN=your_huggingface_token
 """
 
 import argparse

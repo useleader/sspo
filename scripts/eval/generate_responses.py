@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import json
+import torch
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -98,6 +99,7 @@ def load_benchmark_prompts(dataset: str) -> List[dict]:
     elif dataset == "mtbench":
         # Load MT-Bench prompts
         # MT-Bench has 8 categories with multi-turn conversations
+        print("Warning: Using mock MT-Bench prompts (mtbench library not installed)")
         return generate_mtbench_prompts()
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
