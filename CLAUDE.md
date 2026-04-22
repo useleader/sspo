@@ -9,75 +9,142 @@ SSPO (Semi-Supervised Preference Optimization) is an ICLR 2026 paper reproductio
 ## Environment Setup
 
 ```bash
-conda create -n sspo python==3.10.0
-conda activate sspo
-pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu118
-cd /home/yanzm/sspo/src
-pip install -r requirements.txt
+# Install uv (Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create Python environment
+cd /home/yanzm/sspo
+uv venv --python 3.10 .venv
+source .venv/bin/activate
+
+# Install dependencies
+uv pip install torch --index-url https://download.pytorch.org/whl/cu118
+uv pip install tqdm numpy
+cd src && pip install -r requirements.txt
 ```
 
 **Requirements**: GPU with 6GB+ VRAM (A100 40GB / RTX 4090 24GB recommended), 16GB+ RAM, 50GB+ storage.
 
+**Note**: Current WSL environment has no GPU. `torch.cuda.is_available() = False` is expected. Training runs on 8x H100 cluster.
+
+## Project Structure
+
+```
+/home/yanzm/sspo/
+├── src/                           # Paper source code (LLaMA-Factory fork)
+│   ├── src_sspo/llamafactory/     #   SSPO implementation
+│   │   ├── train/dpo/trainer.py   #   ★ SSPO core algorithm
+│   │   ├── data/processors/       #   Data processors
+│   │   └── hparams/finetuning_args.py  # Hyperparameters
+│   ├── preprocessing_data/        #   Paper's preprocessing reference
+│   ├── examples/                  #   Paper training examples
+│   ├── data/                     #   LLaMA-Factory data + dataset_info.json
+│   └── requirements.txt           #   Dependencies
+│
+├── scripts/                       # Project pipeline scripts (our implementation)
+│   ├── download_data.py           #   Download UltraFeedback + UltraChat
+│   ├── preprocess_data.py         #   Sample fb%/ch% ratios
+│   ├── generate_model_configs.py  #   Generate training YAML configs
+│   ├── train_sspo.sh             #   SLURM training (8x H100)
+│   ├── train_local.sh            #   Local debug (1 GPU)
+│   ├── run_all_experiments.sh     #   Orchestrator
+│   └── eval/                     #   Evaluation package
+│       ├── generate_responses.py  #   Generate model responses
+│       ├── alpaca_eval_evaluator.py  # LC-Win Rate
+│       ├── mtbench_evaluator.py  #   MT-Bench 8-category
+│       └── aggregate_results.py   #   Result aggregation
+│
+└── docs/
+    ├── adr/                       #   8 Architecture Decision Records
+    └── knowledge/SSPO/            #   Paper knowledge base (9 files)
+```
+
+## Data Flow
+
+```
+scripts/download_data.py    → HuggingFace → cache/
+scripts/preprocess_data.py → Sample fb%/ch% → src/data/dataset_info.json
+scripts/generate_model_configs.py → YAML configs
+scripts/train_sspo.sh     → torchrun → src/train.py → src/src_sspo/llamafactory/
+scripts/eval/              ← Trained model → Evaluation
+```
+
 ## Common Commands
 
-### Data Preprocessing
+### Data Pipeline
 ```bash
-python preprocessing_data/preprocessing_ultrachat.py --fb [feedback_ratio] --ch [chat_ratio]
-```
-`fb` = labeled feedback ratio, `ch` = unlabeled chat ratio
+# Download data
+python scripts/download_data.py --output cache/
 
-### Training Configuration
+# Preprocess data (fb=labeled%, ch=unlabeled%)
+python scripts/preprocess_data.py --fb 0.01 --ch 0.10
+
+# Generate training configs
+python scripts/generate_model_configs.py --output configs/
+```
+
+### Training
 ```bash
-python examples/train/make_yaml.py --peft lora --method sspo --model_path mistralai/Mistral-7B-Instruct-v0.2
+# Generate configs + run locally (debug)
+bash scripts/run_all_experiments.sh --local
+
+# Generate configs + submit SLURM jobs
+bash scripts/run_all_experiments.sh --submit
 ```
 
-### Execute Training
+### Evaluation
 ```bash
-bash examples/train/train.sh
+# Generate responses
+python scripts/eval/generate_responses.py \
+    --model_path saves/mistral-7b-it/sspo/fb0.01_ch0.1/best_model \
+    --dataset alpacaeval --output results/responses.json
+
+# Evaluate and aggregate
+python scripts/eval/aggregate_results.py --results-dir results/
 ```
 
-## Architecture
+## Key Parameters (from Paper Table 4, ADR-0008)
 
-### Core Code Structure
-```
-src/src_sspo/llamafactory/
-├── train/                    # Training implementations
-│   ├── dpo/trainer.py       # DPO trainer (contains SSPO implementation)
-│   ├── kto/trainer.py       # KTO trainer
-│   ├── ppo/trainer.py       # PPO trainer
-│   └── rm/trainer.py        # Reward model trainer
-├── data/                    # Data processing
-│   └── processors/           # Dataset processors (feedback, pairwise, supervised, unsupervised)
-├── model/                   # Model loading and patching
-│   └── loader.py            # Model initialization
-└── hparams/                 # Hyperparameter definitions
-```
-
-### SSPO Implementation
-The SSPO algorithm is implemented within `src/src_sspo/llamafactory/train/dpo/trainer.py` as a subclass/extension of DPO training. It uses pseudo-labeling on unlabeled preference data to leverage semi-supervised learning.
-
-### Data Flow
-1. Raw data → Preprocessing scripts in `preprocessing_data/`
-2. Preprocessed data → DataLoaders in `llamafactory/data/`
-3. DataLoaders → Trainer.compute_loss() in `llamafactory/train/*/trainer.py`
-4. Loss gradients → Model update via PEFT (LoRA default)
+| Parameter | Value |
+|-----------|-------|
+| LoRA rank | 8 |
+| Learning rate | 1e-5 |
+| Batch size | 64 (per node) |
+| Context length | 1024 |
+| γ_0 | 1.0 |
+| γ_min | 0.22 |
+| γ_decay | 0.001 |
+| sspo_prior | 0.5 |
+| β (beta) | 2.0 |
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/src_sspo/llamafactory/train/dpo/trainer.py` | DPO/SSPO trainer implementation |
-| `src/examples/train/make_yaml.py` | Training config YAML generator |
-| `src/preprocessing_data/preprocessing_ultrachat.py` | UltraFeedback dataset preprocessing |
-| `src/requirements.txt` | Python dependencies |
+| `src/src_sspo/llamafactory/train/dpo/trainer.py` | SSPO loss implementation |
+| `src/src_sspo/llamafactory/hparams/finetuning_args.py` | SSPO hyperparameters |
+| `scripts/preprocess_data.py` | Data sampling (fb%/ch%) |
+| `scripts/eval/generate_responses.py` | Response generation for benchmarks |
 
-## Knowledge Base
+## Models (from Paper)
 
-Project documentation and research notes are in `docs/` (Obsidian format). Key files:
-- `docs/SSPO 论文精读.md` - Paper analysis
-- `docs/SSPO 理论分析.md` - Theoretical analysis
-- `docs/SSPO 复现规划.md` - Reproduction plan
+1. `mistralai/Mistral-7B-Instruct-v0.2`
+2. `meta-llama/Meta-Llama-3-8B-Instruct` (requires HF_TOKEN)
+3. `Qwen/Qwen2-7B-Instruct`
+
+## Data Ratios (from Paper Table 1)
+
+| Labeled (fb) | Unlabeled (ch) | D_L count | D_U count |
+|--------------|----------------|-----------|-----------|
+| 1% | 10% | ~611 | 20,000 |
+| 5% | 10% | ~3,057 | 20,000 |
+| 10% | 10% | ~6,114 | 20,000 |
 
 ## Baselines Supported
 
-SSPO, DPO, ORPO, SimPO, KTO, SSRM, SPA - all use similar training infrastructure but with different loss functions in their respective trainers.
+SSPO, DPO, ORPO, SimPO, KTO, SSRM, SPA — all use similar training infrastructure but with different loss functions in their respective trainers.
+
+## Documentation
+
+- ADRs: `docs/adr/` — 8 architecture decision records
+- Knowledge base: `docs/knowledge/SSPO/` — 9 files covering full paper
