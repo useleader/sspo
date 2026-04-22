@@ -144,7 +144,7 @@ def generate_responses(
     """Generate responses for prompts."""
     results = []
     
-    for i in tqdm(range(0, len(prompts), batch_size, desc="Generating"):
+    for i in tqdm(range(0, len(prompts), batch_size), desc="Generating"):
         batch = prompts[i:i+batch_size]
         
         # Prepare inputs
