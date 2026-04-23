@@ -38,15 +38,16 @@ cd src && pip install -r requirements.txt
 │   │   └── hparams/finetuning_args.py  # Hyperparameters
 │   ├── preprocessing_data/        #   Paper's preprocessing reference
 │   ├── examples/                  #   Paper training examples
-│   ├── data/                     #   LLaMA-Factory data + dataset_info.json
+│   ├── data/                      #   LLaMA-Factory data + dataset_info.json
 │   └── requirements.txt           #   Dependencies
 │
 ├── scripts/                       # Project pipeline scripts (our implementation)
 │   ├── download_data.py           #   Download UltraFeedback + UltraChat
 │   ├── preprocess_data.py         #   Sample fb%/ch% ratios
 │   ├── generate_model_configs.py  #   Generate training YAML configs
+│   ├── analyze_data.py           #   Data analysis & statistics
 │   ├── train_sspo.sh             #   SLURM training (8x H100)
-│   ├── train_local.sh            #   Local debug (1 GPU)
+│   ├── train_local.sh             #   Local debug (1 GPU)
 │   ├── run_all_experiments.sh     #   Orchestrator
 │   └── eval/                     #   Evaluation package
 │       ├── generate_responses.py  #   Generate model responses
@@ -54,9 +55,32 @@ cd src && pip install -r requirements.txt
 │       ├── mtbench_evaluator.py  #   MT-Bench 8-category
 │       └── aggregate_results.py   #   Result aggregation
 │
-└── docs/
-    ├── adr/                       #   8 Architecture Decision Records
-    └── knowledge/SSPO/            #   Paper knowledge base (9 files)
+├── tests/                        # Test suite (TDD workflow)
+│   ├── data/                     #   Data tests
+│   │   ├── test_download.py
+│   │   ├── test_preprocess.py
+│   │   ├── test_model_configs.py
+│   │   └── test_data_analysis.py
+│   └── eval/                     #   Eval tests
+│       └── test_generate_responses.py
+│
+├── configs/                      # Generated YAML configs (gitignored after generation)
+├── data/                        # Raw downloaded data
+│   ├── ultrafeedback/           #   UltraFeedback preference dataset
+│   └── ultrachat/               #   UltraChat conversations
+├── processed/                   # Preprocessed intermediate data
+├── saves/                       # Trained model checkpoints (LoRA weights)
+├── logs/                        # Training logs
+├── plots/                       # Training visualizations (loss curves)
+├── results/                     # Evaluation results
+│   ├── samples/                 #   Generated responses for evaluation
+│   ├── alpaca_eval/             #   AlpacaEval scores
+│   └── mtbench/                 #   MT-Bench scores
+├── notebooks/                    # Jupyter notebooks for analysis
+├── docs/
+│   ├── adr/                    #   8 Architecture Decision Records
+│   └── knowledge/SSPO/         #   Paper knowledge base (9 files)
+└── .gitignore
 ```
 
 ## Data Flow
