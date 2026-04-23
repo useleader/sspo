@@ -37,7 +37,7 @@ torchrun \
     --nnodes=1 \
     --nproc_per_node=1 \
     --master_port=29500 \
-    src/train.py \
+    src/src_sspo/train.py \
     --config "$CONFIG_FILE"
 
 echo "Training complete!"

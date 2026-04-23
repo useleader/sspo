@@ -69,7 +69,7 @@ torchrun \
     --nproc_per_node=$NPROC_PER_NODE \
     --master_port=$MASTER_PORT \
     --master_addr=$SLURM_JOB_NODENAME \
-    src/train.py \
+    src/src_sspo/train.py \
     --config "$CONFIG_FILE"
 
 echo "Training complete!"
