@@ -6,207 +6,201 @@
 
 ## 项目状态
 
-| 项目 | 状态 | 说明 |
+| 模块 | 状态 | 说明 |
 |------|------|------|
-| 知识库 | ✅ 完成 | 19个笔记在 `docs/` |
-| 代码仓库 | ✅ 已克隆 | `/home/yanzm/sspo/src/` |
-| 环境配置 | ⚠️ 待配置 | 需要GPU环境 |
-| 数据准备 | ⏳ 待执行 | 需要先配置环境 |
-| 模型训练 | ⏳ 待执行 | 需要先配置环境 |
-
----
-
-## 环境要求
-
-**当前环境**: CPU only (7.6GB RAM)
-
-| 组件 | 最低要求 | 推荐配置 |
-|------|----------|----------|
-| GPU | NVIDIA 6GB+ | A100 40GB / RTX 4090 24GB |
-| 内存 | 16GB | 32GB+ |
-| 存储 | 50GB | 100GB+ SSD |
-
-**详细指南**: [[SSPO 环境搭建指南]]
+| 知识库 | ✅ | 10个ADRs + 9个知识文件 |
+| 数据下载 | ✅ | UltraFeedback + UltraChat |
+| 数据预处理 | ✅ | Combined dataset 生成 |
+| 模型配置 | ✅ | 27个训练配置 |
+| 测试套件 | ✅ | 73 tests passing |
+| 训练脚本 | ✅ | SLURM + Local |
 
 ---
 
 ## 快速开始
 
-### 已有内容
+### 1. 环境配置
+
+```bash
+# 安装 uv (Python包管理器)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 创建Python环境
+cd /home/yanzm/sspo
+uv venv --python 3.10 .venv
+source .venv/bin/activate
+
+# 安装依赖
+uv pip install torch --index-url https://download.pytorch.org/whl/cu118
+uv pip install tqdm numpy requests datasets
+cd src && pip install -r requirements.txt
+```
+
+### 2. 数据准备
+
+```bash
+# 下载数据集 (需要 ~1.5GB 存储)
+python scripts/download_data.py --dataset all --output data/
+
+# 预处理 (fb=标注比例, ch=无标注比例)
+python scripts/preprocess_data.py --fb 0.01 --ch 0.1 --output processed/
+```
+
+### 3. 生成训练配置
+
+```bash
+# 生成所有实验配置
+python scripts/generate_model_configs.py --output configs/
+
+# 查看生成结果
+ls configs/mistral-7b-it/sspo/
+```
+
+### 4. 本地调试训练
+
+```bash
+# 单GPU本地调试
+bash scripts/run_all_experiments.sh --local
+
+# 或直接运行
+bash scripts/train_local.sh configs/mistral-7b-it/sspo/fb0.01_ch0.1_sspo_mistral-7b-it.yaml
+```
+
+### 5. 提交SLURM任务 (8x H100集群)
+
+```bash
+# 生成配置并提交所有实验
+bash scripts/run_all_experiments.sh --submit
+```
+
+---
+
+## 项目结构
 
 ```
 /home/yanzm/sspo/
-├── docs/                          # 知识库 (Obsidian)
-│   ├── SSPO 入口.md
-│   ├── SSPO 论文精读.md
-│   ├── SSPO 理论分析.md
-│   ├── SSPO 复现规划.md
-│   ├── SSPO 环境搭建指南.md       ← 新增
-│   ├── SSPO 代码实现分析.md
-│   ├── SSPO 与其他方法对比.md
-│   ├── 半监督学习概念.md
-│   ├── 伪标签 Pseudo-labeling.md
-│   ├── Bradley-Terry 模型.md
-│   ├── KL散度与对齐.md
-│   ├── LLM Alignment - 概念入门.md
-│   ├── RLHF - 人类反馈强化学习.md
-│   ├── DPO - 直接偏好优化.md
-│   ├── SimPO - 简单偏好优化.md
-│   ├── ORPO - 赔率比偏好优化.md
-│   ├── KTO - 卡尼曼特沃斯基优化.md
-│   ├── Obsidian插件安装指南.md
-│   └── Git多端同步工作流.md
+├── src/                              # LLaMA-Factory fork (SSPO实现)
+│   └── src_sspo/llamafactory/
+│       ├── train/dpo/trainer.py     # SSPO核心算法
+│       ├── data/processors/         # 数据处理器
+│       └── hparams/finetuning_args.py
 │
-├── src/                           # 官方代码 (已克隆)
-│   ├── src_sspo/                  # SSPO 核心实现
-│   ├── examples/                  # 训练示例
-│   ├── preprocessing_data/        # 数据预处理
-│   └── data/                      # 演示数据
+├── scripts/                          # 训练Pipeline
+│   ├── download_data.py             # 数据下载
+│   ├── preprocess_data.py           # 数据预处理
+│   ├── generate_model_configs.py    # 配置生成
+│   ├── analyze_data.py             # 数据分析
+│   ├── train_sspo.sh               # SLURM训练
+│   ├── train_local.sh              # 本地训练
+│   ├── run_all_experiments.sh      # 实验编排
+│   └── eval/                       # 评估模块
+│       ├── generate_responses.py
+│       ├── alpaca_eval_evaluator.py
+│       ├── mtbench_evaluator.py
+│       └── aggregate_results.py
 │
-├── course_pdfs/                   # 课程PPT
-├── configs/                       # 配置文件 (待填充)
-├── data/                          # 数据集 (待填充)
-└── README.md
-```
-
-### 官方仓库结构
-
-```
-src/
-├── src_sspo/                      # SSPO核心代码
-│   └── llamafactory/              # 基于LLaMA-Factory
-│       ├── train/                # 训练器 (dpo, kto, ppo, sft, rm)
-│       │   └── dpo/              # DPO trainer (含SSPO)
-│       ├── data/                 # 数据处理
-│       └── model/                # 模型加载
+├── tests/                           # 测试套件 (73 tests)
+│   ├── data/                       # 数据测试
+│   └── eval/                       # 评估测试
 │
-├── examples/
-│   ├── train/                    # 训练脚本
-│   │   ├── make_yaml.py         # 生成配置
-│   │   └── train.sh             # 训练入口
-│   └── SSRM/                    # SSRM基线
+├── configs/                         # 生成的训练配置 (27个)
+│   ├── mistral-7b-it/sspo/
+│   ├── llama3-8b-it/sspo/
+│   └── qwen2-7b-it/sspo/
 │
-└── preprocessing_data/           # 数据预处理
-    ├── preprocessing_ultrachat.py
-    ├── preprocessing_medical.py
-    └── preprocessing_business.py
+├── data/                            # 原始数据集
+│   ├── ultrafeedback/
+│   └── ultrachat/
+│
+├── processed/                       # 预处理后的数据
+│   └── ultra_combined_fb*.json
+│
+├── saves/                          # 模型权重 (LoRA)
+├── logs/                           # 训练日志
+├── plots/                          # Loss曲线
+├── results/                        # 评估结果
+│   ├── samples/
+│   ├── alpaca_eval/
+│   └── mtbench/
+│
+├── docs/
+│   ├── adr/                        # 架构决策记录 (10个)
+│   └── knowledge/SSPO/            # 论文知识库 (9个文件)
+│
+└── CLAUDE.md                       # Claude Code 指南
 ```
 
 ---
 
-## 复现步骤
+## 实验配置
 
-### Phase 1: 环境搭建 (当前)
+| 模型 | 方法 | 标注比例 (fb) | 无标注比例 (ch) |
+|------|------|---------------|-----------------|
+| Mistral-7B-Instruct | SSPO | 1%, 5%, 10% | 10% |
+| Llama-3-8B-Instruct | DPO | 1%, 5%, 10% | 10% |
+| Qwen2-7B-Instruct | SimPO | 1%, 5%, 10% | 10% |
+
+**关键超参数 (来自论文):**
+
+| 参数 | 值 |
+|------|-----|
+| LoRA rank | 8 |
+| Learning rate | 1e-5 |
+| Batch size | 64 (per node) |
+| Context length | 1024 |
+| β (beta) | 2.0 |
+| SSPO γ_0 | 1.0 |
+| SSPO γ_min | 0.22 |
+
+---
+
+## 测试
 
 ```bash
-# 1. 配置 GPU 环境 (云GPU或本地)
-#    参考: docs/SSPO 环境搭建指南.md
+# 运行所有测试
+source .venv/bin/activate
+python -m pytest tests/ -v
 
-# 2. 创建 conda 环境
-conda create -n sspo python==3.10.0
-conda activate sspo
+# 只运行数据测试
+python -m pytest tests/data/ -v
 
-# 3. 安装 PyTorch (CUDA版本)
-pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu118
-
-# 4. 安装依赖
-cd /home/yanzm/sspo/src
-pip install -r requirements.txt
-
-# 5. 验证
-python -c "import torch; print(torch.cuda.is_available())"
+# 只运行评估测试
+python -m pytest tests/eval/ -v
 ```
 
-### Phase 2: 数据准备
+**测试覆盖:**
+- 边缘情况 (ratio = 0.0, 1.0, 极小值)
+- 数据质量 (缺失字段，空值处理)
+- 数据完整性 (labeled/unlabeled 分离)
+- 规模测试 (100k样本)
+- 评估脚本签名和导入
+
+---
+
+## 评估
 
 ```bash
-# 预处理数据 (fb=标注比例, ch=无标注比例)
-python preprocessing_data/preprocessing_ultrachat.py --fb 0.1 --ch 0.1
+# 生成模型响应
+python scripts/eval/generate_responses.py \
+    --model_path saves/mistral-7b-it/sspo/fb0.01_ch0.1/best_model \
+    --dataset alpacaeval \
+    --output results/samples/mistral_sspo.json
+
+# 评估 AlpacaEval (LC-Win Rate)
+python scripts/eval/alpaca_eval_evaluator.py \
+    --model-outputs results/samples/mistral_sspo.json \
+    --output-dir results/alpaca_eval/
+
+# 评估 MT-Bench
+python scripts/eval/mtbench_evaluator.py \
+    --model-outputs results/samples/mistral_sspo.json \
+    --output-dir results/mtbench/
+
+# 聚合结果
+python scripts/eval/aggregate_results.py \
+    --results-dir results/ \
+    --output results/aggregated.json
 ```
-
-### Phase 3: 配置生成
-
-```bash
-# 生成训练配置
-python examples/train/make_yaml.py \
-    --peft lora \
-    --method sspo \
-    --model_path mistralai/Mistral-7B-Instruct-v0.2
-```
-
-### Phase 4: 开始训练
-
-```bash
-# 编辑 train.sh 添加训练命令
-nano examples/train/train.sh
-
-# 执行训练
-bash examples/train/train.sh
-```
-
----
-
-## 核心文件
-
-| 文件 | 说明 |
-|------|------|
-| `src/src_sspo/llamafactory/train/dpo/trainer.py` | DPO trainer (含SSPO实现) |
-| `src/examples/train/make_yaml.py` | 配置生成脚本 |
-| `src/preprocessing_data/preprocessing_ultrachat.py` | UltraFeedback预处理 |
-| `docs/SSPO 复现规划.md` | 详细复现计划 |
-
----
-
-## 复现进度
-
-- [x] Phase 0: 知识库建立
-- [ ] Phase 1: 环境搭建 ← **当前**
-- [ ] Phase 2: 数据准备
-- [ ] Phase 3: 算法实现
-- [ ] Phase 4: 训练配置
-- [ ] Phase 5: 实验与评估
-
----
-
-## 学习路径
-
-```
-1. 概念入门
-   docs/LLM Alignment - 概念入门.md
-   docs/Bradley-Terry 模型.md
-   docs/KL散度与对齐.md
-
-2. 方法演进
-   docs/RLHF - 人类反馈强化学习.md
-   docs/DPO - 直接偏好优化.md
-   docs/SimPO - 简单偏好优化.md  (可选)
-   docs/ORPO - 赔率比偏好优化.md  (可选)
-   docs/KTO - 卡尼曼特沃斯基优化.md  (可选)
-
-3. SSPO核心
-   docs/伪标签 Pseudo-labeling.md
-   docs/半监督学习概念.md
-   docs/SSPO 论文精读.md
-   docs/SSPO 理论分析.md
-
-4. 动手实践 ← 你在这里
-   docs/SSPO 环境搭建指南.md
-   docs/SSPO 复现规划.md
-```
-
----
-
-## 云GPU推荐
-
-如果没有本地GPU，可以使用:
-
-| 提供商 | 特点 | 链接 |
-|--------|------|------|
-| **Modal** | 按秒计费，代码即部署 | modal.com |
-| **Vast.ai** | 性价比高 | vast.ai |
-| **RunPod** | 实例多样 | runpod.io |
-
-参考: `docs/SSPO 环境搭建指南.md` 的 Modal 章节
 
 ---
 
@@ -215,4 +209,3 @@ bash examples/train/train.sh
 - [SSPO GitHub](https://github.com/MLAI-Yonsei/SSPO)
 - [arXiv论文](https://arxiv.org/abs/2511.00040)
 - [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory)
-- [Alignment Handbook](https://github.com/huggingface/alignment-handbook)
