@@ -46,7 +46,23 @@ python scripts/download_data.py --dataset all --output data/
 python scripts/preprocess_data.py --fb 0.01 --ch 0.1 --output processed/
 ```
 
-### 3. 生成训练配置
+### 3. 模型下载 (ModelScope)
+
+```bash
+# 安装 ModelScope SDK (已包含在依赖中)
+uv pip install modelscope
+
+# 设置 Token (可选，部分模型需要)
+export MODELSCOPE_TOKEN=your_token_here
+
+# 下载模型 (以 Mistral 为例，约 14GB)
+python scripts/download_models.py --model mistral --output models/
+
+# 或下载所有模型
+python scripts/download_models.py --model all --output models/
+```
+
+### 4. 生成训练配置
 
 ```bash
 # 生成所有实验配置
@@ -56,7 +72,7 @@ python scripts/generate_model_configs.py --output configs/
 ls configs/mistral-7b-it/sspo/
 ```
 
-### 4. 本地调试训练
+### 5. 本地调试训练
 
 ```bash
 # 单GPU本地调试
@@ -66,7 +82,7 @@ bash scripts/run_all_experiments.sh --local
 bash scripts/train_local.sh configs/mistral-7b-it/sspo/fb0.01_ch0.1_sspo_mistral-7b-it.yaml
 ```
 
-### 5. 提交SLURM任务 (8x H100集群)
+### 6. 提交SLURM任务 (8x H100集群)
 
 ```bash
 # 生成配置并提交所有实验
