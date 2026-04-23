@@ -15,8 +15,6 @@ Usage:
 """
 
 import argparse
-import hashlib
-import os
 import sys
 import time
 from dataclasses import dataclass
@@ -38,8 +36,8 @@ class DatasetConfig:
 DATASETS = {
     "ultrafeedback": DatasetConfig(
         name="UltraFeedback",
-        hf_path="HuggingFaceH4/ultrafeedback_binarized",
-        splits=["train_prefs", "test_prefs"],
+        hf_path="argilla/ultrafeedback-binarized-preferences",
+        splits=["train"],
         expected_size_mb=500,
     ),
     "ultrachat": DatasetConfig(
@@ -49,10 +47,6 @@ DATASETS = {
         expected_size_mb=1000,
     ),
 }
-
-MAX_RETRIES = 5
-INITIAL_BACKOFF = 2  # seconds
-
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -197,22 +191,22 @@ def main():
             try:
                 cache_dir = args.cache_dir or "~/.cache/huggingface"
                 print(f"Using HuggingFace cache: {cache_dir}")
-                
-                # Use huggingface_hub to download
-                local_dir = snapshot_download(
-                    repo_id=config.hf_path,
-                    cache_dir=cache_dir,
-                    local_dir=dataset_dir,
-                    local_dir_use_symlinks=False,
-                )
-                
-                # Copy to output if different
-                if Path(local_dir) != dataset_dir:
-                    import shutil
-                    for item in Path(local_dir).iterdir():
-                        if item.is_file():
-                            shutil.copy2(item, dataset_dir / item.name)
-                
+
+                # Use datasets library to load and save
+                from datasets import load_dataset
+
+                for split in config.splits:
+                    print(f"  Loading {split} split...")
+                    ds = load_dataset(
+                        config.hf_path,
+                        split=split,
+                        cache_dir=cache_dir,
+                    )
+                    # Save to local directory
+                    output_file = dataset_dir / f"{split}.json"
+                    ds.to_json(output_file)
+                    print(f"    Saved: {output_file}")
+
                 print(f"✓ Downloaded {config.name} to {dataset_dir}")
                 results[dataset_key] = True
                 
