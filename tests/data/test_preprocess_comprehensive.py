@@ -83,7 +83,7 @@ class TestDataQualityMissingFields:
         }]
         ultrafeedback = []
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         assert len(combined) == 0, "Should skip samples with no assistant message"
 
@@ -92,21 +92,20 @@ class TestDataQualityMissingFields:
         ultrachat = [{"instruction": "test", "messages": []}]
         ultrafeedback = []
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         assert len(combined) == 0, "Should skip samples with empty messages"
 
     def test_ultrachat_missing_instruction(self):
-        """UltraChat with missing instruction should use empty string."""
+        """UltraChat with no user message should use empty string."""
         ultrachat = [{
             "messages": [
-                {"role": "user", "content": "Hello"},
                 {"role": "assistant", "content": "Hi there"}
             ]
         }]
         ultrafeedback = []
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         assert len(combined) == 1
         assert combined[0]["instruction"] == ""
@@ -122,7 +121,7 @@ class TestDataQualityMissingFields:
         }]
         ultrachat = []
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         assert len(combined) == 1
         assert combined[0]["chosen"] == "4"
@@ -144,7 +143,7 @@ class TestDataIntegrity:
         ]
         ultrachat = []
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         for sample in combined:
             assert sample["unlabeled"] == "", "Labeled data should have empty unlabeled"
@@ -160,7 +159,7 @@ class TestDataIntegrity:
         }]
         ultrafeedback = []
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         assert len(combined) == 1
         assert combined[0]["chosen"] == ""
@@ -183,7 +182,7 @@ class TestDataIntegrity:
             for i in range(100)
         ]
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         has_labeled_early = any(s["chosen"] != "" for s in combined[:50])
         has_unlabeled_early = any(s["unlabeled"] != "" for s in combined[:50])
@@ -203,7 +202,7 @@ class TestDataIntegrity:
             ]}
         ]
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         for i, sample in enumerate(combined):
             assert "instruction" in sample, f"Sample {i} missing instruction field"
@@ -321,7 +320,7 @@ class TestScale:
             for i in range(50000)
         ]
 
-        combined = create_combined_dataset(ultrafeedback, ultrachat)
+        combined, *_ = create_combined_dataset(ultrafeedback, ultrachat)
 
         assert len(combined) == 100000, f"Expected 100000, got {len(combined)}"
 

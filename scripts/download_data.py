@@ -1,28 +1,49 @@
 #!/usr/bin/env python3
 """
-Download UltraFeedback and UltraChat datasets from HuggingFace.
+Download datasets from HuggingFace for SSPO experiments.
 
-This script handles:
-- Dataset downloading from HuggingFace
-- Retry logic for unreliable networks
-- Progress tracking
-- Verification of downloaded data
+Datasets:
+- General: UltraFeedback (paired), UltraChat (unpaired)
+- Medical: UltraMedical-Preference (paired), UltraMedical (unpaired)
+- Business: DSP-Business (paired), Business-Book (unpaired)
 
 Usage:
     python scripts/download_data.py --dataset all --output data/
     python scripts/download_data.py --dataset ultrafeedback --output data/
-    python scripts/download_data.py --dataset ultrachat --output data/
+    python scripts/download_data.py --dataset ultramedical_preference --output data/
+    python scripts/download_data.py --dataset dsp_business --output data/
 """
 
 import argparse
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import requests
 from tqdm import tqdm
+
+# Add scripts to path for logging module
+sys.path.insert(0, str(Path(__file__).parent))
+from pipeline_logging import (
+    Colors,
+    StepTracker,
+    get_logger,
+    print_header,
+    print_success,
+    print_error,
+    print_warning,
+)
+
+
+# ANSI color shortcuts
+GREEN = Colors.GREEN
+RED = Colors.RED
+YELLOW = Colors.YELLOW
+CYAN = Colors.CYAN
+BOLD = Colors.BOLD
+RESET = Colors.RESET
 
 
 @dataclass
@@ -34,6 +55,7 @@ class DatasetConfig:
 
 
 DATASETS = {
+    # General domain datasets
     "ultrafeedback": DatasetConfig(
         name="UltraFeedback",
         hf_path="argilla/ultrafeedback-binarized-preferences",
@@ -46,7 +68,34 @@ DATASETS = {
         splits=["train_sft", "test_sft", "train_gen", "test_gen"],
         expected_size_mb=1000,
     ),
+    # Medical domain datasets
+    "ultramedical_preference": DatasetConfig(
+        name="UltraMedical-Preference",
+        hf_path="medmcqa/ultramedical-preference",
+        splits=["train", "validation"],
+        expected_size_mb=100,
+    ),
+    "ultramedical": DatasetConfig(
+        name="UltraMedical",
+        hf_path="medmcqa/ultramedical",
+        splits=["train_sft", "test_sft"],
+        expected_size_mb=200,
+    ),
+    # Business domain datasets
+    "dsp_business": DatasetConfig(
+        name="DSP-Business",
+        hf_path="lawrence/NLP-DSP",
+        splits=["train", "validation"],
+        expected_size_mb=10,
+    ),
+    "business_book": DatasetConfig(
+        name="Business-Book",
+        hf_path="tasksource/book_summaries",
+        splits=["train", "validation"],
+        expected_size_mb=150,
+    ),
 }
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -56,7 +105,15 @@ def parse_args():
         "--dataset",
         type=str,
         default="all",
-        choices=["all", "ultrafeedback", "ultrachat"],
+        choices=[
+            "all",
+            "ultrafeedback",
+            "ultrachat",
+            "ultramedical_preference",
+            "ultramedical",
+            "dsp_business",
+            "business_book",
+        ],
         help="Which dataset to download",
     )
     parser.add_argument(
@@ -77,158 +134,142 @@ def parse_args():
         help="Force re-download even if dataset exists",
     )
     parser.add_argument(
-        "--verify",
-        action="store_true",
-        default=True,
-        help="Verify dataset integrity after download",
+        "--log_dir",
+        type=str,
+        default="logs",
+        help="Directory for log files",
     )
     return parser.parse_args()
-
-
-def download_with_retry(url: str, output_path: Path, chunk_size: int = 8192) -> bool:
-    """Download file with exponential backoff retry logic."""
-    for attempt in range(MAX_RETRIES):
-        try:
-            response = requests.get(url, stream=True, timeout=60)
-            response.raise_for_status()
-            
-            total_size = int(response.headers.get("content-length", 0))
-            
-            with open(output_path, "wb") as f, tqdm(
-                desc=output_path.name,
-                total=total_size,
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as pbar:
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        pbar.update(len(chunk))
-            return True
-            
-        except requests.exceptions.RequestException as e:
-            if attempt < MAX_RETRIES - 1:
-                backoff = INITIAL_BACKOFF * (2 ** attempt)
-                print(f"  Attempt {attempt + 1} failed: {e}")
-                print(f"  Retrying in {backoff}s...")
-                time.sleep(backoff)
-            else:
-                print(f"  Failed after {MAX_RETRIES} attempts")
-                return False
-    return False
 
 
 def verify_dataset(dataset_path: Path, expected_files: list[str]) -> bool:
     """Verify dataset files exist and have content."""
     missing = []
     empty = []
-    
+
     for fname in expected_files:
         fpath = dataset_path / fname
         if not fpath.exists():
             missing.append(fname)
         elif fpath.stat().st_size == 0:
             empty.append(fname)
-    
+
     if missing:
-        print(f"  Missing files: {missing}")
+        print_warning(f"  Missing files: {missing}")
     if empty:
-        print(f"  Empty files: {empty}")
-    
+        print_warning(f"  Empty files: {empty}")
+
     return len(missing) == 0 and len(empty) == 0
-
-
-def print_section(title: str):
-    """Print a section header."""
-    print(f"\n{'=' * 60}")
-    print(f"  {title}")
-    print(f"{'=' * 60}\n")
 
 
 def main():
     args = parse_args()
     output_dir = Path(args.output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # Setup logger
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"download_{timestamp}.log"
+    logger = get_logger("download", log_file)
+
+    # Determine datasets to download
     datasets_to_download = []
     if args.dataset == "all":
         datasets_to_download = list(DATASETS.keys())
     else:
         datasets_to_download = [args.dataset]
-    
-    print_section("SSPO Data Downloader")
-    print(f"Output directory: {output_dir}")
-    print(f"Datasets: {', '.join(datasets_to_download)}")
-    
-    # Check for HuggingFace CLI
+
+    # Setup step tracker
+    tracker = StepTracker("download", total_steps=len(datasets_to_download))
+
+    print_header("SSPO Data Downloader")
+    print(f"{CYAN}Output directory:{RESET} {output_dir}")
+    print(f"{CYAN}Log file:{RESET} {log_file}")
+    print(f"{CYAN}Datasets:{RESET} {', '.join(datasets_to_download)}")
+    print()
+
+    # Check for HuggingFace libraries
+    tracker.step("Checking dependencies")
     try:
         from huggingface_hub import snapshot_download
-        hf_available = True
-    except ImportError:
-        print("Warning: huggingface_hub not installed, using fallback download")
-        hf_available = False
-    
+        from datasets import load_dataset
+        logger.info("HuggingFace libraries available")
+        print_success("Dependencies OK")
+    except ImportError as e:
+        print_error(f"Missing dependency: {e}")
+        print(f"Install with: uv pip install datasets huggingface_hub")
+        sys.exit(1)
+
     results = {}
-    
-    for dataset_key in datasets_to_download:
+    overall_start = time.time()
+
+    for i, dataset_key in enumerate(datasets_to_download, 1):
+        tracker.step(f"Downloading {DATASETS[dataset_key].name}", step_num=i)
         config = DATASETS[dataset_key]
-        print_section(f"Downloading {config.name}")
-        
+
         dataset_dir = output_dir / config.name.lower()
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        
+
+        print(f"\n  {BOLD}Source:{RESET} {config.hf_path}")
+        print(f"  {BOLD}Splits:{RESET} {', '.join(config.splits)}")
+
         # Check if already downloaded
         if not args.force and verify_dataset(dataset_dir, config.splits):
-            print(f"✓ {config.name} already downloaded, skipping")
+            print_success(f"{config.name} already downloaded, skipping")
+            logger.info(f"Skipped {config.name}: already exists")
             results[dataset_key] = True
             continue
-        
-        print(f"Downloading from: {config.hf_path}")
-        print(f"Splits: {', '.join(config.splits)}")
-        
-        if hf_available:
-            try:
-                cache_dir = args.cache_dir or "~/.cache/huggingface"
-                print(f"Using HuggingFace cache: {cache_dir}")
 
-                # Use datasets library to load and save
-                from datasets import load_dataset
+        logger.info(f"Starting download: {config.name}")
+        print(f"  {CYAN}Downloading...{RESET}")
 
-                for split in config.splits:
-                    print(f"  Loading {split} split...")
-                    ds = load_dataset(
-                        config.hf_path,
-                        split=split,
-                        cache_dir=cache_dir,
-                    )
-                    # Save to local directory
-                    output_file = dataset_dir / f"{split}.json"
-                    ds.to_json(output_file)
-                    print(f"    Saved: {output_file}")
+        try:
+            for split in config.splits:
+                print(f"\n  {BOLD}[{split}]{RESET} ", end="", flush=True)
 
-                print(f"✓ Downloaded {config.name} to {dataset_dir}")
-                results[dataset_key] = True
-                
-            except Exception as e:
-                print(f"✗ Failed to download {config.name}: {e}")
-                results[dataset_key] = False
-        else:
-            print("Error: huggingface_hub required for download")
-            print("Install with: pip install huggingface_hub")
+                ds = load_dataset(
+                    config.hf_path,
+                    split=split,
+                    cache_dir=args.cache_dir,
+                )
+
+                # Save to local JSONL
+                output_file = dataset_dir / f"{split}.json"
+                ds.to_json(output_file)
+
+                size_mb = output_file.stat().st_size / (1024 * 1024)
+                print(f"{GREEN}✓{RESET} {size_mb:.1f} MB")
+
+                logger.info(f"Downloaded {split}: {output_file} ({size_mb:.1f} MB)")
+
+            print_success(f"Downloaded {config.name}")
+            logger.info(f"Complete: {config.name}")
+            results[dataset_key] = True
+
+        except Exception as e:
+            print_error(f"Failed: {e}")
+            logger.error(f"Failed {config.name}: {e}")
             results[dataset_key] = False
-    
+
     # Summary
-    print_section("Download Summary")
+    print_header("Download Summary")
     success_count = sum(1 for v in results.values() if v)
     total_count = len(results)
-    
+    elapsed = time.time() - overall_start
+
     for dataset_key, success in results.items():
-        status = "✓" if success else "✗"
+        status = f"{GREEN}✓{RESET}" if success else f"{RED}✗{RESET}"
         print(f"  {status} {DATASETS[dataset_key].name}")
-    
-    print(f"\n{success_count}/{total_count} datasets downloaded successfully")
-    
+
+    print()
+    if success_count == total_count:
+        print_success(f"All {total_count} datasets downloaded ({elapsed:.1f}s)")
+    else:
+        print_error(f"{success_count}/{total_count} downloaded ({elapsed:.1f}s)")
+
+    logger.info(f"Summary: {success_count}/{total_count} in {elapsed:.1f}s")
+
     if success_count < total_count:
         sys.exit(1)
 

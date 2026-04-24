@@ -19,17 +19,29 @@ data/*.json
 data/*.jsonl
 data/*.arrow
 data/*.parquet
-configs/*.yaml
+data/.cache/
+processed/
 
-# Models
+# Generated configs (can be regenerated)
+configs/
+
+# Models & Checkpoints
+saves/
 *.bin
 *.safetensors
 *.pt
 *.ckpt
+*.pt.*
 
 # Logs
 logs/
 *.log
+plots/
+
+# Results
+results/samples/
+results/*.json
+results/*.csv
 
 # OS
 .DS_Store
@@ -45,6 +57,7 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+debug/
 
 # HuggingFace cache
 .cache/
@@ -53,6 +66,7 @@ hub/
 
 # Jupyter
 .ipynb_checkpoints/
+notebooks/
 
 # Environment
 .env

@@ -135,8 +135,8 @@ class TestSharedConfigFields:
                 with open(path) as f:
                     config = yaml.safe_load(f)
 
-                assert config["learning_rate"] == 1e-5
-                assert config["num_train_epochs"] == 1
+                assert config["learning_rate"] == 5e-7
+                assert config["num_train_epochs"] == 3
                 assert config["bf16"] is True
 
 

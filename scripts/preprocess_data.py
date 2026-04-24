@@ -7,6 +7,7 @@ This script:
 2. Applies sampling ratios (fb for labeled, ch for unlabeled)
 3. Combines into single JSON with fields: instruction, chosen, rejected, unlabeled
 4. Registers in dataset_info.json for LLaMA-Factory
+5. Logs all stages to logs/ directory
 
 Usage:
     python scripts/preprocess_data.py --fb 0.01 --ch 0.1 --output processed/
@@ -20,26 +21,44 @@ Paper configuration (from ADR-0003):
 
 import argparse
 import json
-import logging
 import random
+import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
 from tqdm import tqdm
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s]: %(message)s"
+# Add scripts to path for logging module
+sys.path.insert(0, str(Path(__file__).parent))
+from pipeline_logging import (
+    Colors,
+    StepTracker,
+    get_logger,
+    print_header,
+    print_success,
+    print_error,
+    print_warning,
+    print_info,
 )
-logger = logging.getLogger(__name__)
+
+
+# ANSI color shortcuts
+GREEN = Colors.GREEN
+RED = Colors.RED
+YELLOW = Colors.YELLOW
+CYAN = Colors.CYAN
+BOLD = Colors.BOLD
+RESET = Colors.RESET
 
 
 def set_seed(seed: int = 42):
     """Set random seed for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
+    print_info(f"Random seed set to {seed}")
 
 
 def parse_args():
@@ -50,13 +69,20 @@ def parse_args():
         "--fb",
         type=float,
         default=0.1,
-        help="Ratio of UltraFeedback to keep as labeled data (0.0-1.0)",
+        help="Ratio of paired data to keep as labeled (0.0-1.0)",
     )
     parser.add_argument(
         "--ch",
         type=float,
         default=0.1,
-        help="Ratio of UltraChat to keep as unlabeled data (0.0-1.0)",
+        help="Ratio of unpaired data to keep as unlabeled (0.0-1.0)",
+    )
+    parser.add_argument(
+        "--domain",
+        type=str,
+        default="general",
+        choices=["general", "medical", "business"],
+        help="Domain for preprocessing",
     )
     parser.add_argument(
         "--output",
@@ -76,6 +102,12 @@ def parse_args():
         default="data",
         help="Directory containing downloaded data",
     )
+    parser.add_argument(
+        "--log_dir",
+        type=str,
+        default="logs",
+        help="Directory for log files",
+    )
     return parser.parse_args()
 
 
@@ -90,105 +122,104 @@ def load_jsonl(filepath: Path) -> List[dict]:
     return data
 
 
-def load_datasets(data_dir: Path) -> tuple:
-    """Load UltraFeedback and UltraChat from local files."""
-    logger.info("Loading datasets from local files...")
+# Domain configurations
+DOMAIN_CONFIGS = {
+    "general": {
+        "paired_name": "ultrafeedback",
+        "unpaired_name": "ultrachat",
+        "paired_split": "train",
+        "unpaired_split": "train_sft",
+        "dataset_prefix": "ultra",
+    },
+    "medical": {
+        "paired_name": "ultramedical_preference",
+        "unpaired_name": "ultramedical",
+        "paired_split": "train",
+        "unpaired_split": "train_sft",
+        "dataset_prefix": "medical",
+    },
+    "business": {
+        "paired_name": "dsp_business",
+        "unpaired_name": "business_book",
+        "paired_split": "train",
+        "unpaired_split": "train",
+        "dataset_prefix": "biz",
+    },
+}
 
-    # UltraFeedback: data/ultrafeedback/train.json (JSONL)
-    ultrafeedback_path = data_dir / "ultrafeedback" / "train.json"
-    ultrafeedback = load_jsonl(ultrafeedback_path)
-    logger.info(f"  Loaded {len(ultrafeedback)} UltraFeedback samples")
 
-    # UltraChat: data/ultrachat/train_sft.json (JSONL)
-    ultrachat_path = data_dir / "ultrachat" / "train_sft.json"
-    ultrachat = load_jsonl(ultrachat_path)
-    logger.info(f"  Loaded {len(ultrachat)} UltraChat samples")
-
-    return ultrafeedback, ultrachat
+def get_dataset_paths(data_dir: Path, domain: str) -> tuple:
+    """Get dataset paths for specified domain."""
+    config = DOMAIN_CONFIGS[domain]
+    paired_path = data_dir / config["paired_name"] / f"{config['paired_split']}.json"
+    unpaired_path = data_dir / config["unpaired_name"] / f"{config['unpaired_split']}.json"
+    return paired_path, unpaired_path, config["dataset_prefix"]
 
 
 def keep_partial_data(dataset, keep_ratio: float) -> List:
-    """
-    Randomly keep only keep_ratio portion of the dataset.
-
-    Args:
-        dataset: Original dataset
-        keep_ratio: Ratio of data to keep (0.0-1.0)
-
-    Returns:
-        List of selected samples
-    """
+    """Randomly keep only keep_ratio portion of the dataset."""
     total_samples = len(dataset)
     num_to_keep = int(total_samples * keep_ratio)
-
     indices = random.sample(range(total_samples), num_to_keep)
-
     return [dataset[i] for i in indices]
 
 
 def create_combined_dataset(
-    ultrafeedback: List,
-    ultrachat: List,
-) -> List[dict]:
-    """
-    Combine UltraFeedback (labeled) and UltraChat (unlabeled).
-
-    Args:
-        ultrafeedback: List of UltraFeedback samples
-        ultrachat: List of UltraChat samples
-
-    Returns:
-        Combined dataset with fields: instruction, chosen, rejected, unlabeled
-    """
+    paired: List,
+    unpaired: List,
+    logger=None,
+) -> tuple:
+    """Combine paired (labeled) and unpaired data into single dataset."""
     combined = []
 
-    # Add labeled data from UltraFeedback
-    # UltraFeedback fields: instruction, chosen_response, rejected_response
-    logger.info(f"Processing {len(ultrafeedback)} UltraFeedback samples...")
-    for sample in tqdm(ultrafeedback, desc="UltraFeedback"):
+    # Add labeled data from paired dataset
+    label_count = 0
+    logger.info(f"Processing {len(paired)} paired samples...") if logger else None
+    for sample in tqdm(paired, desc="Paired", unit="samples"):
         combined.append({
             "instruction": sample["instruction"],
             "chosen": sample["chosen_response"],
             "rejected": sample["rejected_response"],
-            "unlabeled": "",  # Empty for labeled data
+            "unlabeled": "",
         })
+        label_count += 1
 
-    # Add unlabeled data from UltraChat
-    # UltraChat fields: messages (list of {role, content})
-    logger.info(f"Processing {len(ultrachat)} UltraChat samples...")
+    # Add unlabeled data from unpaired dataset
+    logger.info(f"Processing {len(unpaired)} unpaired samples...") if logger else None
+    unlabel_count = 0
     skipped_no_assistant = 0
-    for sample in tqdm(ultrachat, desc="UltraChat"):
+    for sample in tqdm(unpaired, desc="Unpaired", unit="samples"):
         messages = sample.get("messages", [])
         if not messages:
             skipped_no_assistant += 1
             continue
 
-        # Get assistant's last message
         response = ""
-        for msg in reversed(messages):
+        instruction = ""
+        for msg in messages:
+            if msg.get("role") == "user" and not instruction:
+                instruction = msg.get("content", "")
             if msg.get("role") == "assistant":
                 response = msg.get("content", "")
                 break
 
-        # Skip if no assistant message found
         if not response:
             skipped_no_assistant += 1
             continue
 
         combined.append({
-            "instruction": sample.get("instruction", ""),
+            "instruction": instruction,
             "chosen": "",
             "rejected": "",
             "unlabeled": response,
         })
+        unlabel_count += 1
 
-    if skipped_no_assistant > 0:
-        logger.info(f"  Skipped {skipped_no_assistant} samples with no assistant message")
-
-    # Shuffle combined dataset
+    # Shuffle
+    logger.info("Shuffling combined dataset...") if logger else None
     random.shuffle(combined)
 
-    return combined
+    return combined, label_count, unlabel_count, skipped_no_assistant
 
 
 def save_combined_dataset(
@@ -197,20 +228,8 @@ def save_combined_dataset(
     fb_ratio: float,
     ch_ratio: float,
     dataset_name: Optional[str] = None,
-) -> Path:
-    """
-    Save combined dataset to JSON file.
-
-    Args:
-        dataset: Combined dataset
-        output_dir: Output directory
-        fb_ratio: Labeled data ratio
-        ch_ratio: Unlabeled data ratio
-        dataset_name: Custom dataset name
-
-    Returns:
-        Path to saved JSON file
-    """
+) -> tuple:
+    """Save combined dataset to JSON file. Returns (path, size_mb)."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if dataset_name is None:
@@ -218,12 +237,14 @@ def save_combined_dataset(
 
     json_file = output_dir / f"{dataset_name}.json"
 
+    print_info(f"Saving {len(dataset)} samples to {json_file}...")
     with open(json_file, "w", encoding="utf-8") as f:
         json.dump(dataset, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"Saved combined dataset to {json_file}")
+    size_mb = json_file.stat().st_size / (1024 * 1024)
+    print_success(f"Saved: {json_file} ({size_mb:.1f} MB)")
 
-    return json_file
+    return json_file, size_mb
 
 
 def update_dataset_info(
@@ -232,28 +253,18 @@ def update_dataset_info(
     ch_ratio: float,
     dataset_name: Optional[str] = None,
 ) -> None:
-    """
-    Update dataset_info.json for LLaMA-Factory compatibility.
-
-    Args:
-        output_dir: Directory containing dataset_info.json
-        fb_ratio: Labeled data ratio
-        ch_ratio: Unlabeled data ratio
-        dataset_name: Custom dataset name
-    """
+    """Update dataset_info.json for LLaMA-Factory compatibility."""
     if dataset_name is None:
         dataset_name = f"ultra_combined_fb{fb_ratio}_ch{ch_ratio}"
 
     dataset_info_path = output_dir / "dataset_info.json"
 
-    # Load existing or create new
     if dataset_info_path.exists():
         with open(dataset_info_path, "r", encoding="utf-8") as f:
             dataset_info = json.load(f)
     else:
         dataset_info = {}
 
-    # Add new dataset entry
     json_file = f"./{dataset_name}.json"
     dataset_info[dataset_name] = {
         "file_name": json_file,
@@ -269,58 +280,76 @@ def update_dataset_info(
     with open(dataset_info_path, "w", encoding="utf-8") as f:
         json.dump(dataset_info, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"Updated dataset_info.json with {dataset_name}")
-
-
-def print_summary(
-    fb_ratio: float,
-    ch_ratio: float,
-    ultrafeedback_size: int,
-    ultrachat_size: int,
-    combined_size: int,
-) -> None:
-    """Print preprocessing summary."""
-    logger.info("=" * 60)
-    logger.info("Preprocessing Summary")
-    logger.info("=" * 60)
-    logger.info(f"  Labeled ratio (fb): {fb_ratio}")
-    logger.info(f"  Unlabeled ratio (ch): {ch_ratio}")
-    logger.info(f"  UltraFeedback samples: {ultrafeedback_size}")
-    logger.info(f"  UltraChat samples: {ultrachat_size}")
-    logger.info(f"  Combined dataset size: {combined_size}")
-    logger.info("=" * 60)
+    print_success(f"Updated dataset_info.json")
 
 
 def main():
     args = parse_args()
-    set_seed(args.seed)
-
-    logger.info("Starting data preprocessing...")
-    logger.info(f"  Labeled ratio (fb): {args.fb}")
-    logger.info(f"  Unlabeled ratio (ch): {args.ch}")
-    logger.info(f"  Data directory: {args.data_dir}")
-    logger.info(f"  Output directory: {args.output}")
-
-    data_dir = Path(args.data_dir)
     output_dir = Path(args.output)
+    log_dir = Path(args.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load datasets from local files
-    ultrafeedback_raw, ultrachat_raw = load_datasets(data_dir)
+    # Setup logger
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"preprocess_{timestamp}.log"
+    logger = get_logger("preprocess", log_file)
 
-    # Sample according to ratios
-    ultrafeedback = keep_partial_data(ultrafeedback_raw, keep_ratio=args.fb)
-    ultrachat = keep_partial_data(ultrachat_raw, keep_ratio=args.ch)
+    # Setup step tracker (5 steps)
+    tracker = StepTracker("preprocess", total_steps=5)
 
-    logger.info(f"Kept {len(ultrafeedback)} UltraFeedback samples ({args.fb * 100:.1f}%)")
-    logger.info(f"Kept {len(ultrachat)} UltraChat samples ({args.ch * 100:.1f}%)")
+    print_header("SSPO Data Preprocessor")
+    print(f"{CYAN}Labeled ratio (fb):{RESET} {args.fb}")
+    print(f"{CYAN}Unlabeled ratio (ch):{RESET} {args.ch}")
+    print(f"{CYAN}Domain:{RESET} {args.domain}")
+    print(f"{CYAN}Data directory:{RESET} {args.data_dir}")
+    print(f"{CYAN}Output directory:{RESET} {output_dir}")
+    print(f"{CYAN}Log file:{RESET} {log_file}")
+    print()
 
-    # Create combined dataset
-    combined = create_combined_dataset(ultrafeedback, ultrachat)
+    overall_start = time.time()
 
-    # Save
-    dataset_name = f"ultra_combined_fb{args.fb}_ch{args.ch}"
+    # Step 1: Set seed
+    tracker.step("Setting random seed", step_num=1)
+    set_seed(args.seed)
+    logger.info(f"Seed: {args.seed}")
 
-    json_file = save_combined_dataset(
+    # Step 2: Load datasets
+    tracker.step("Loading datasets", step_num=2)
+    data_dir = Path(args.data_dir)
+
+    paired_path, unpaired_path, prefix = get_dataset_paths(data_dir, args.domain)
+    config = DOMAIN_CONFIGS[args.domain]
+
+    print_info(f"Loading paired data from {paired_path}...")
+    paired_raw = load_jsonl(paired_path)
+    print_info(f"Loaded {len(paired_raw)} samples from {config['paired_name']}")
+
+    print_info(f"Loading unpaired data from {unpaired_path}...")
+    unpaired_raw = load_jsonl(unpaired_path)
+    print_info(f"Loaded {len(unpaired_raw)} samples from {config['unpaired_name']}")
+
+    # Step 3: Sample datasets
+    tracker.step("Sampling datasets", step_num=3)
+    paired = keep_partial_data(paired_raw, keep_ratio=args.fb)
+    unpaired = keep_partial_data(unpaired_raw, keep_ratio=args.ch)
+
+    print_info(f"Sampled {len(paired)} paired samples ({args.fb * 100:.1f}%)")
+    print_info(f"Sampled {len(unpaired)} unpaired samples ({args.ch * 100:.1f}%)")
+
+    # Step 4: Create combined dataset
+    tracker.step("Creating combined dataset", step_num=4)
+    combined, label_count, unlabel_count, skipped = create_combined_dataset(
+        paired, unpaired, logger
+    )
+
+    if skipped > 0:
+        print_warning(f"Skipped {skipped} samples with no assistant message")
+
+    # Step 5: Save
+    tracker.step("Saving combined dataset", step_num=5)
+    dataset_name = f"{prefix}_combined_fb{args.fb}_ch{args.ch}"
+
+    json_file, size_mb = save_combined_dataset(
         combined,
         output_dir,
         args.fb,
@@ -330,15 +359,18 @@ def main():
 
     update_dataset_info(output_dir, args.fb, args.ch, dataset_name)
 
-    print_summary(
-        args.fb,
-        args.ch,
-        len(ultrafeedback),
-        len(ultrachat),
-        len(combined),
-    )
-
-    logger.info(f"✓ Preprocessing complete: {json_file}")
+    # Summary
+    elapsed = time.time() - overall_start
+    print_header("Preprocessing Summary")
+    print(f"{CYAN}Domain:{RESET} {args.domain}")
+    print(f"{CYAN}Labeled samples:{RESET} {label_count}")
+    print(f"{CYAN}Unlabeled samples:{RESET} {unlabel_count}")
+    print(f"{CYAN}Total samples:{RESET} {len(combined)}")
+    print(f"{CYAN}Skipped:{RESET} {skipped}")
+    print(f"{CYAN}Output file:{RESET} {json_file} ({size_mb:.1f} MB)")
+    print()
+    print_success(f"Complete ({elapsed:.1f}s)")
+    tracker.complete()
 
 
 if __name__ == "__main__":
