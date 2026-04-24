@@ -27,9 +27,9 @@ Note:
 import argparse
 import os
 import yaml
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 
 @dataclass
@@ -136,7 +136,7 @@ def parse_args():
         "--method",
         type=str,
         default="all",
-        choices=["all", "sspo", "dpo", "simpo"],
+        choices=["all", "sspo", "dpo", "orpo", "simpo", "kto", "ssrm", "spa"],
         help="Which training method",
     )
     parser.add_argument(
@@ -257,13 +257,37 @@ def generate_yaml(
             "pref_loss": "sigmoid",
             "pref_beta": 0.1,  # DPO typically uses lower beta
         })
+    elif method == "orpo":
+        config.update({
+            "pref_loss": "orpo",
+            "pref_beta": 0.1,
+        })
     elif method == "simpo":
         config.update({
             "pref_loss": "simpo",
             "pref_beta": base_config.pref_beta,
             "simpo_gamma": base_config.simpo_gamma,
         })
-    
+    elif method == "kto":
+        config.update({
+            "stage": "kto",
+            "pref_loss": "kto_pair",
+            "pref_beta": 0.1,
+        })
+    elif method == "ssrm":
+        config.update({
+            "pref_loss": "ssrm",
+            "ssrm_prior": 0.5,
+            "ssrm_iterations": 3,
+            "ssrm_threshold": 0.9,
+        })
+    elif method == "spa":
+        config.update({
+            "pref_loss": "spa",
+            "spa_iterations": 3,
+            "spa_expansion_ratio": 0.1,
+        })
+
     # Generate filename
     filename = f"fb{fb_ratio}_ch{ch_ratio}_{method}_{model.name}.yaml"
     filepath = model_dir / filename
@@ -306,7 +330,7 @@ def main():
     
     # Determine methods
     if args.method == "all":
-        methods = ["sspo", "dpo", "simpo"]
+        methods = ["sspo", "dpo", "orpo", "simpo", "kto", "ssrm", "spa"]
     else:
         methods = [args.method]
     

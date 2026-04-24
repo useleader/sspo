@@ -10,3 +10,5 @@
 | [0006](0006-mistral-7b-lora-config.md) | Support All Three Paper Models with LoRA | accepted | 2026-04-22 |
 | [0007](0007-complete-experimental-topology.md) | Complete 19-Table Experimental Topology | accepted | 2026-04-22 |
 | [0008](0008-hyperparameter-configuration.md) | Paper-Aligned Hyperparameter Configuration | accepted | 2026-04-22 |
+| [0009](0009-baseline-methods-training-configuration.md) | Baseline Methods Training Configuration | proposed | 2026-04-23 |
+| [0010](0010-ssrm-and-spa-implementation.md) | SSRM and SPA Implementation | proposed | 2026-04-23 |
