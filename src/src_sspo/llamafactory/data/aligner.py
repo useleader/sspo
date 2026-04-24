@@ -112,12 +112,12 @@ def convert_alpaca(
         dataset_attr.ranking
         and isinstance(example[dataset_attr.chosen], str)
         and isinstance(example[dataset_attr.rejected], str)
-        and not isinstance(example[dataset_attr.unlabeled], str)
+        and (dataset_attr.unlabeled is None or not isinstance(example.get(dataset_attr.unlabeled), str))
     ):  # pairwise example (DPO, ORPO, SIMPO)
         response = [
             {"role": Role.ASSISTANT.value, "content": example[dataset_attr.chosen]},
             {"role": Role.ASSISTANT.value, "content": example[dataset_attr.rejected]},
-            {"role": Role.ASSISTANT.value, "content": example[dataset_attr.unlabeled]},
+            {"role": Role.ASSISTANT.value, "content": example[dataset_attr.unlabeled] if example.get(dataset_attr.unlabeled) else ""},
         ]
     elif dataset_attr.response and isinstance(example[dataset_attr.response], str):  # normal example
         response = [{"role": Role.ASSISTANT.value, "content": example[dataset_attr.response]}]

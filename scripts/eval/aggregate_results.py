@@ -47,6 +47,11 @@ def aggregate_results(
             with open(result_file) as f:
                 data = json.load(f)
 
+            # Skip list/array format files (these are response files, not result files)
+            if isinstance(data, list):
+                logging.debug(f"Skipping {result_file}: list format (response file)")
+                continue
+
             method = data.get("method", "unknown")
             model = data.get("model", "unknown")
 
@@ -93,15 +98,16 @@ def generate_comparison_table(
                 row.append(f"{value:.1f}" if isinstance(value, float) else value)
             lines.append("| " + " | ".join(row) + " |")
     else:
-        lines.append("| Category | " + " | ".join(methods[1:]) + " |")
-        lines.append("|----------|" + "|".join(["---"] * len(methods)) + "|")
-        categories = ["reasoning", "math", "coding", "writing"]
-        for cat in categories:
-            row = [cat.capitalize()]
-            for method in methods[1:]:
-                key = f"{cat}_{method.lower()}"
+        # MT-Bench: check if we have per-model average scores
+        # Format: {model}_{method} -> average_score
+        lines.append("| Model | " + " | ".join(methods) + " |")
+        lines.append("|-------|" + "|".join(["---"] * len(methods)) + "|")
+        for model in models:
+            row = [model]
+            for method in methods:
+                key = f"{model}_{method.lower()}"
                 value = data.get(key, "N/A")
-                row.append(f"{value:.1f}" if isinstance(value, float) else value)
+                row.append(f"{value:.2f}" if isinstance(value, float) else value)
             lines.append("| " + " | ".join(row) + " |")
 
     return "\n".join(lines)

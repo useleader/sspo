@@ -67,34 +67,55 @@ def parse_args():
 
 
 def load_model_and_tokenizer(model_path: str):
-    """Load model and tokenizer from path."""
-    # This is a placeholder - actual implementation would use
-    # the LLaMA-Factory model loading utilities
+    """Load model and tokenizer from path with LoRA adapter support."""
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    
+    from peft import PeftModel
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         trust_remote_code=True,
     )
-    model = AutoModelForCausalLM.from_pretrained(
+
+    # Load base model
+    base_model = AutoModelForCausalLM.from_pretrained(
         model_path,
         device_map="auto",
         trust_remote_code=True,
+        torch_dtype=torch.bfloat16,
     )
-    
+
+    # Try to load LoRA adapter if available
+    adapter_path = Path(model_path) / "adapter_model.safetensors"
+    if adapter_path.exists():
+        print(f"  Loading LoRA adapter from {model_path}")
+        model = PeftModel.from_pretrained(base_model, model_path)
+        model = model.merge_and_unload()
+        print(f"  LoRA adapter loaded and merged")
+    else:
+        print(f"  No LoRA adapter found, using base model")
+        model = base_model
+
     return model, tokenizer
 
 
 def load_benchmark_prompts(dataset: str) -> List[dict]:
     """Load benchmark prompts."""
     if dataset == "alpacaeval":
-        # Load AlpacaEval prompts
+        # Load AlpacaEval prompts using hf-mirror.com
+        import os
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
         try:
-            from alpaca_eval import load_benchmark
-            benchmark = load_benchmark(configs=[], include_ground_truth=False)
-            return benchmark
-        except ImportError:
-            print("Warning: alpaca_eval not installed, using mock data")
+            from datasets import load_dataset
+            benchmark_data = load_dataset("tatsu-lab/alpaca_eval", trust_remote_code=True)
+            prompts = []
+            for item in benchmark_data["eval"]:
+                prompts.append({
+                    "instruction": item["instruction"],
+                    "input": "",
+                })
+            return prompts
+        except Exception as e:
+            print(f"Warning: Failed to load alpaca_eval: {e}, using mock data")
             return generate_mock_prompts(100)
     elif dataset == "mtbench":
         # Load MT-Bench prompts
@@ -156,7 +177,11 @@ def generate_responses(
             truncation=True,
             max_length=2048 - config.max_new_tokens,
         )
-        
+
+        # Move inputs to same device as model
+        device = next(model.parameters()).device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+
         # Generate
         with torch.inference_mode():
             outputs = model.generate(

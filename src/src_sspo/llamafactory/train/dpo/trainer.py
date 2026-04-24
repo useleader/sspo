@@ -104,7 +104,16 @@ class CustomDPOTrainer(DPOTrainer):
         self.sspo_gamma_0 = finetuning_args.sspo_gamma_0
         self.sspo_gamma_decay = finetuning_args.sspo_gamma_decay
         self.sspo_prior = finetuning_args.sspo_prior
-        
+
+        #! EDIT : SSRM hyperparams
+        self.ssrm_prior = finetuning_args.ssrm_prior
+        self.ssrm_threshold = finetuning_args.ssrm_threshold
+        self.ssrm_iterations = finetuning_args.ssrm_iterations
+
+        #! EDIT : SPA hyperparams
+        self.spa_iterations = finetuning_args.spa_iterations
+        self.spa_expansion_ratio = finetuning_args.spa_expansion_ratio
+
         #! EDIT : Add moving average params for reward normalization
         self.reward_norm_momentum = 0.95  # moving average momentum value
         self.running_mean = None  # moving average value
@@ -175,7 +184,7 @@ class CustomDPOTrainer(DPOTrainer):
         sft_loss = -chosen_logps
         odds_ratio_loss = -F.logsigmoid(log_odds)
         orpo_loss = sft_loss + self.beta * odds_ratio_loss
-        return orpo_loss
+        return orpo_loss.mean()  # Return mean to make it a scalar
 
     def simpo_loss(self, chosen_logps: "torch.Tensor", rejected_logps: "torch.Tensor") -> "torch.Tensor":
         r"""
@@ -185,7 +194,7 @@ class CustomDPOTrainer(DPOTrainer):
         gamma_logratios = self.simpo_gamma / self.beta
         logits = pi_logratios - gamma_logratios
         simpo_loss = -F.logsigmoid(self.beta * logits)
-        return simpo_loss
+        return simpo_loss.mean()  # Return mean to make it a scalar
     
     #! EDIT : add unlabeled data for SSPO training
     def sspo_loss(
@@ -298,6 +307,82 @@ class CustomDPOTrainer(DPOTrainer):
         # logger.info(f"Loss in GPU {torch.cuda.current_device()} = pn_loss: {pn_loss_mean:.4f}, final_u_loss: {final_u_loss:.4f}, sspo_loss: {sspo_loss:.4f}, current_gamma: {current_gamma:.4f}")
         return sspo_loss, pn_loss, orpo_loss, u_losses_tensor
 
+    def ssrm_loss(
+        self,
+        policy_chosen_logps: "torch.Tensor",
+        policy_rejected_logps: "torch.Tensor",
+        policy_unlabeled_logps: "torch.Tensor",
+    ) -> "torch.Tensor":
+        r"""
+        Computes SSRM (Semi-Supervised Reward Modeling) loss.
+        Uses pseudo-labeling on unlabeled data combined with DPO loss on labeled data.
+        """
+        device = self.accelerator.device
+
+        # Get DPO loss on labeled data using SimPO-like computation
+        if policy_chosen_logps.numel() > 0 and policy_rejected_logps.numel() > 0:
+            # Compute pairwise difference for preference learning
+            pi_logratios = policy_chosen_logps - policy_rejected_logps
+            gamma_logratios = self.simpo_gamma / self.beta
+            logits = pi_logratios - gamma_logratios
+            dpo_loss = -F.logsigmoid(self.beta * logits).mean()
+        else:
+            dpo_loss = torch.tensor(0.0, device=device, requires_grad=True)
+
+        # Compute pseudo-label loss on unlabeled data
+        if policy_unlabeled_logps.numel() > 0:
+            confidence = torch.sigmoid(policy_unlabeled_logps)
+            pseudo_labels = (confidence > self.ssrm_threshold).float()
+
+            ssrm_loss = -(
+                self.ssrm_prior * pseudo_labels * F.logsigmoid(policy_unlabeled_logps)
+                + (1 - self.ssrm_prior) * (1 - pseudo_labels) * F.logsigmoid(-policy_unlabeled_logps)
+            )
+            ssrm_loss = ssrm_loss.mean()
+
+            # Weighted combination
+            alpha = 0.1  # Weight for SSRM loss
+            total_loss = dpo_loss + alpha * ssrm_loss
+        else:
+            total_loss = dpo_loss
+
+        return total_loss
+
+    def spa_loss(
+        self,
+        policy_chosen_logps: "torch.Tensor",
+        policy_rejected_logps: "torch.Tensor",
+        policy_unlabeled_logps: "torch.Tensor",
+    ) -> "torch.Tensor":
+        r"""
+        Computes SPA (Spread Preference Annotation) loss.
+        Uses iterative self-annotation with DPO as base.
+        """
+        # Get DPO/SimPO loss on labeled data
+        if policy_chosen_logps.numel() > 0 and policy_rejected_logps.numel() > 0:
+            # SPA uses SimPO as base
+            base_loss = self.simpo_loss(policy_chosen_logps, policy_rejected_logps)
+        else:
+            base_loss = torch.tensor(0.0, device=self.accelerator.device, requires_grad=True)
+
+        # SPA adds a selection bias correction term
+        if policy_unlabeled_logps.numel() > 0:
+            # Use log probabilities as quality scores
+            scores = policy_unlabeled_logps
+            # Select top-k samples
+            k = int(len(scores) * self.spa_expansion_ratio)
+            if k == 0:
+                k = 1
+            k = min(k, len(scores))
+            top_scores, _ = torch.topk(scores, k=k)
+            # Selection bias correction
+            spa_correction = -top_scores.mean() if top_scores.numel() > 0 else torch.tensor(0.0, device=self.accelerator.device)
+            total_loss = base_loss + spa_correction
+        else:
+            total_loss = base_loss
+
+        return total_loss
+
     def compute_preference_loss(
         self,
         policy_chosen_logps: "torch.Tensor",
@@ -329,16 +414,27 @@ class CustomDPOTrainer(DPOTrainer):
         elif not self.finetuning_args.use_ref_model:
             if self.loss_type == "orpo":
                 losses = self.odds_ratio_loss(policy_chosen_logps, policy_rejected_logps)
+                return losses, self.beta * policy_chosen_logps, self.beta * policy_rejected_logps
             elif self.loss_type == "simpo":
                 losses = self.simpo_loss(policy_chosen_logps, policy_rejected_logps)
-            else:
-                return losses, self.beta * chosen_rewards, self.beta * rejected_rewards
+                return losses, self.beta * policy_chosen_logps, self.beta * policy_rejected_logps
+            elif self.loss_type == "ssrm":
+                losses = self.ssrm_loss(policy_chosen_logps, policy_rejected_logps, policy_unlabeled_logps)
+                return losses, self.beta * policy_chosen_logps, self.beta * policy_rejected_logps
+            elif self.loss_type == "spa":
+                losses = self.spa_loss(policy_chosen_logps, policy_rejected_logps, policy_unlabeled_logps)
+                return losses, self.beta * policy_chosen_logps, self.beta * policy_rejected_logps
+            else:  # default DPO with sigmoid loss
+                losses, chosen_rewards, rejected_rewards = self.dpo_loss(
+                    policy_chosen_logps, policy_rejected_logps, reference_chosen_logps, reference_rejected_logps
+                )
+                return losses.mean(), self.beta * chosen_rewards, self.beta * rejected_rewards
         else:
             losses, chosen_rewards, rejected_rewards = self.dpo_loss(
                 policy_chosen_logps, policy_rejected_logps, reference_chosen_logps, reference_rejected_logps
             )
-            
-            return losses, chosen_rewards, rejected_rewards
+
+            return losses.mean(), chosen_rewards, rejected_rewards
 
 
     @override
@@ -529,7 +625,10 @@ class CustomDPOTrainer(DPOTrainer):
             metrics[f"{prefix}logps/rejected"] = policy_rejected_logps.mean().item()
             metrics[f"{prefix}logits/chosen"] = policy_chosen_logits.mean().item()
             metrics[f"{prefix}logits/rejected"] = policy_rejected_logits.mean().item()
-            metrics[f"{prefix}logits/unlabeled"] = policy_unlabeled_logits.mean().item()
+            try:
+                metrics[f"{prefix}logits/unlabeled"] = policy_unlabeled_logits.mean().item()
+            except NameError:
+                pass  # Only defined for SSPO loss type
             if self.loss_type == "orpo":
                 metrics[f"{prefix}sft_loss"] = sft_loss.mean().item()
                 metrics[f"{prefix}odds_ratio_loss"] = ((losses - sft_loss) / self.beta).mean().item()

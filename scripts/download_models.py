@@ -67,10 +67,10 @@ MODELS = {
     },
     "llama3": {
         "hf_path": "meta-llama/Meta-Llama-3-8B-Instruct",
-        "ms_path": "AI-ModelScope/Meta-Llama-3-8B-Instruct",
+        "ms_path": "LLM-Research/Meta-Llama-3-8B-Instruct",
         "name": "Meta-Llama-3-8B-Instruct",
         "size_gb": 8,
-        "description": "General purpose instruction-following model (requires HF_TOKEN)",
+        "description": "General purpose instruction-following model (requires token)",
     },
     "qwen2": {
         "hf_path": "Qwen/Qwen2-7B-Instruct",

@@ -140,7 +140,7 @@ class RLHFArguments:
         default=0.0,
         metadata={"help": "The supervised fine-tuning loss coefficient in DPO training."},
     )
-    pref_loss: Literal["sigmoid", "hinge", "ipo", "kto_pair", "orpo", "simpo", "sspo"] = field(
+    pref_loss: Literal["sigmoid", "hinge", "ipo", "kto_pair", "orpo", "simpo", "sspo", "ssrm", "spa"] = field(
         default="sigmoid",
         metadata={"help": "The type of DPO loss to use."},
     )
@@ -182,7 +182,31 @@ class RLHFArguments:
         default="simpo",
         metadata={"help": "The base model for SSPO training."}
     )
-    
+
+    #! EDIT : add SSRM training
+    ssrm_prior: Optional[float] = field(
+        default=0.5,
+        metadata={"help": "The prior probability for SSRM pseudo-labeling."}
+    )
+    ssrm_threshold: Optional[float] = field(
+        default=0.9,
+        metadata={"help": "The confidence threshold for SSRM pseudo-labeling."}
+    )
+    ssrm_iterations: Optional[int] = field(
+        default=3,
+        metadata={"help": "The number of SSRM iterations."}
+    )
+
+    #! EDIT : add SPA training
+    spa_iterations: Optional[int] = field(
+        default=3,
+        metadata={"help": "The number of SPA iterations."}
+    )
+    spa_expansion_ratio: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "The ratio of high-quality samples to add in SPA."}
+    )
+
     ppo_buffer_size: int = field(
         default=1,
         metadata={"help": "The number of mini-batches to make experience buffer in a PPO optimization step."},
@@ -499,7 +523,7 @@ class FinetuningArguments(
         self.freeze_vision_tower = self.freeze_vision_tower or self.train_mm_proj_only
         self.freeze_multi_modal_projector = self.freeze_multi_modal_projector and not self.train_mm_proj_only
         
-        if self.stage == "dpo" and self.pref_loss != "sspo":
+        if self.stage == "dpo" and self.pref_loss not in ["sspo", "ssrm", "spa"]:
             if self.pref_loss == "sigmoid":
                 self.use_ref_model = True
             else:

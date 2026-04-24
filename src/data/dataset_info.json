@@ -633,5 +633,24 @@
       "prompt": "content"
     },
     "folder": "python"
+  },
+  "ultra_combined_fb0.01_ch0.1": {
+    "file_name": "./ultra_combined_fb0.01_ch0.1.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "unlabeled": "unlabeled"
+    }
+  },
+  "ultra_paired_fb0.01": {
+    "file_name": "./ultra_paired_fb0.01.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
   }
 }
