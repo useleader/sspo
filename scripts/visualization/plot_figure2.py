@@ -6,8 +6,6 @@ Plots labeled vs unlabeled loss contribution ratio over training steps.
 import argparse
 import json
 
-import matplotlib.pyplot as plt
-
 
 def plot_figure2(log_file: str, output: str) -> None:
     """Plot labeled vs unlabeled loss contribution ratio over steps.
@@ -17,6 +15,8 @@ def plot_figure2(log_file: str, output: str) -> None:
                   steps, loss_contrib_labeled, loss_contrib_unlabeled
         output: Path to save the PNG figure
     """
+    import matplotlib.pyplot as plt
+
     try:
         with open(log_file, "r") as f:
             data = json.load(f)
@@ -40,6 +40,48 @@ def plot_figure2(log_file: str, output: str) -> None:
     ax.set_title("Loss Contribution Ratio: Labeled vs Unlabeled")
     ax.legend()
     ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output, dpi=150)
+    plt.close()
+
+
+def plot_figure3(log_file: str, output: str) -> None:
+    """Plot reward distribution histograms at different checkpoints.
+
+    Args:
+        log_file: Path to JSON training log with fields:
+                  reward_chosen_mean_step100, reward_chosen_mean_step500,
+                  reward_chosen_mean_step1000 (each is a list of reward values)
+        output: Path to save the PNG figure
+    """
+    import matplotlib.pyplot as plt
+
+    try:
+        with open(log_file, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Log file not found: {log_file}")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON in log file: {log_file}")
+
+    try:
+        step100 = data["reward_chosen_mean_step100"]
+        step500 = data["reward_chosen_mean_step500"]
+        step1000 = data["reward_chosen_mean_step1000"]
+    except KeyError as e:
+        raise KeyError(f"Missing required field: {e}")
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    checkpoints = [("Step 100", step100), ("Step 500", step500), ("Step 1000", step1000)]
+
+    for ax, (title, rewards) in zip(axes, checkpoints):
+        ax.hist(rewards, bins=30, edgecolor="black", alpha=0.7)
+        ax.set_xlabel("Reward")
+        ax.set_ylabel("Count")
+        ax.set_title(f"Reward Distribution - {title}")
+        ax.grid(True, alpha=0.3)
+
     plt.tight_layout()
     plt.savefig(output, dpi=150)
     plt.close()
