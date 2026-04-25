@@ -584,14 +584,38 @@ class CustomDPOTrainer(DPOTrainer):
 
             t = self.state.global_step
             current_gamma = max(self.sspo_gamma_min, self.sspo_gamma_0 * math.exp(-self.sspo_gamma_decay * t))
-            
+
             metrics[f"{prefix}sspo/gamma"] = current_gamma
+
+            # Log loss contribution ratio for Figure 2
+            # R_D_L = gamma * pn_loss / total_loss
+            # R_D_U = (1-gamma) * u_loss / total_loss
+            if losses.item() > 0:
+                labeled_contrib = current_gamma * simpo_losses.mean().item() / losses.item()
+                unlabeled_contrib = (1 - current_gamma) * unlabeled_losses.mean().item() / losses.item()
+                metrics[f"{prefix}sspo/loss_contrib_labeled"] = labeled_contrib
+                metrics[f"{prefix}sspo/loss_contrib_unlabeled"] = unlabeled_contrib
+            else:
+                metrics[f"{prefix}sspo/loss_contrib_labeled"] = 0.0
+                metrics[f"{prefix}sspo/loss_contrib_unlabeled"] = 0.0
 
             if self.finetuning_args.use_ref_model:
                 metrics[f"{prefix}dpo/policy_chosen_logps"] = policy_chosen_logps.mean().item() if policy_chosen_logps.numel() > 0 else 0.0
                 metrics[f"{prefix}dpo/policy_rejected_logps"] = policy_rejected_logps.mean().item() if policy_rejected_logps.numel() > 0 else 0.0
                 metrics[f"{prefix}dpo/reference_chosen_logps"] = reference_chosen_logps.mean().item() if reference_chosen_logps is not None and reference_chosen_logps.numel() > 0 else 0.0
                 metrics[f"{prefix}dpo/reference_rejected_logps"] = reference_rejected_logps.mean().item() if reference_rejected_logps is not None and reference_rejected_logps.numel() > 0 else 0.0
+
+            # Log reward distribution statistics for Figure 3
+            # Sample at specific steps (100, 500, 1000) for KDE visualization
+            if t in [100, 500, 1000] or t % 1000 == 0:
+                if chosen_rewards.numel() > 0:
+                    metrics[f"{prefix}sspo/reward_chosen_mean_step{t}"] = chosen_rewards.mean().item()
+                    metrics[f"{prefix}sspo/reward_chosen_std_step{t}"] = chosen_rewards.std().item() if chosen_rewards.numel() > 1 else 0.0
+                if rejected_rewards.numel() > 0:
+                    metrics[f"{prefix}sspo/reward_rejected_mean_step{t}"] = rejected_rewards.mean().item()
+                    metrics[f"{prefix}sspo/reward_rejected_std_step{t}"] = rejected_rewards.std().item() if rejected_rewards.numel() > 1 else 0.0
+                if unlabeled_rewards.numel() > 0:
+                    metrics[f"{prefix}sspo/reward_unlabeled_mean_step{t}"] = unlabeled_rewards.mean().item()
 
             return losses, metrics
 

@@ -160,6 +160,10 @@ class RLHFArguments:
         default=0.5,
         metadata={"help": "The target reward margin term in SimPO loss."},
     )
+    cpo_alpha: float = field(
+        default=1.0,
+        metadata={"help": "The hyperparameter that controls the strength of the BC regularizer in CPO training."},
+    )
 
     #! EDIT : add SSPO training
     sspo_prior: Optional[float] = field(
@@ -462,7 +466,7 @@ class FinetuningArguments(
         default=False,
         metadata={"help": "Whether or not to train model in purely bf16 precision (without AMP)."},
     )
-    stage: Literal["pt", "sft", "rm", "ppo", "dpo", "kto"] = field(
+    stage: Literal["pt", "sft", "rm", "ppo", "dpo", "kto", "cpo"] = field(
         default="sft",
         metadata={"help": "Which stage will be performed in training."},
     )
@@ -528,6 +532,8 @@ class FinetuningArguments(
                 self.use_ref_model = True
             else:
                 self.use_ref_model = False
+        elif self.stage == "cpo":
+            self.use_ref_model = True  # CPO requires reference model
         else:
             if self.sspo_base == "dpo":
                 self.use_ref_model = True

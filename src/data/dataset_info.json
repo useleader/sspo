@@ -532,17 +532,13 @@
     }
   },
   "kto_mix_en": {
-    "hf_hub_url": "argilla/kto-mix-15k",
-    "formatting": "sharegpt",
+    "file_name": "kto_mix_en.json",
+    "formatting": "alpaca",
+    "ranking": false,
     "columns": {
-      "messages": "completion",
+      "prompt": "prompt",
+      "response": "response",
       "kto_tag": "label"
-    },
-    "tags": {
-      "role_tag": "role",
-      "content_tag": "content",
-      "user_tag": "user",
-      "assistant_tag": "assistant"
     }
   },
   "ultrafeedback_kto": {
@@ -646,6 +642,167 @@
   },
   "ultra_paired_fb0.01": {
     "file_name": "./ultra_paired_fb0.01.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_nl10": {
+    "file_name": "toy_nl10.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_nl50": {
+    "file_name": "toy_nl50.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_nl100": {
+    "file_name": "toy_nl100.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl10": {
+    "file_name": "toy_paired_nl10.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl50": {
+    "file_name": "toy_paired_nl50.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl100": {
+    "file_name": "toy_paired_nl100.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl10_noise10": {
+    "file_name": "toy_paired_nl10_noise10.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl10_noise30": {
+    "file_name": "toy_paired_nl10_noise30.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl10_noise50": {
+    "file_name": "toy_paired_nl10_noise50.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl50_noise10": {
+    "file_name": "toy_paired_nl50_noise10.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl50_noise30": {
+    "file_name": "toy_paired_nl50_noise30.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl50_noise50": {
+    "file_name": "toy_paired_nl50_noise50.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl100_noise10": {
+    "file_name": "toy_paired_nl100_noise10.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl100_noise30": {
+    "file_name": "toy_paired_nl100_noise30.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "toy_paired_nl100_noise50": {
+    "file_name": "toy_paired_nl100_noise50.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "ultra_paired_fb1.0": {
+    "hf_hub_url": "llamafactory/ultrafeedback_binarized",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected"
+    }
+  },
+  "ultra_sft_100": {
+    "hf_hub_url": "HuggingFaceH4/ultrachat_200k",
+    "formatting": "sharegpt",
+    "columns": {
+      "prompt": "instruction",
+      "response": "chosen"
+    }
+  },
+  "ultramedical_paired": {
+    "file_name": "/home/yzm/sspo/configs_cluster/data/ultramedical_paired.json",
     "ranking": true,
     "columns": {
       "prompt": "instruction",
