@@ -1,0 +1,37 @@
+# SSRM Llama3 5% (Table 2, Table 8)
+# Paper Table 8: Same as SimPO - lr=1.5e-7, beta=2, delta=1
+model_name_or_path: ./cache/llama3/LLM-Research/Meta-Llama-3-8B-Instruct
+trust_remote_code: true
+stage: dpo
+do_train: true
+finetuning_type: lora
+template: llama3
+dataset: ultra_combined_fb0.05_ch0.1
+dataset_dir: src/data
+cutoff_len: 1024
+max_samples: null
+overwrite_cache: false
+preprocessing_num_workers: 8
+num_train_epochs: 1
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 16
+learning_rate: 1.5e-7
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+lora_rank: 8
+lora_target: all
+val_size: 0.0
+per_device_eval_batch_size: 2
+eval_strategy: 'no'
+logging_steps: 10
+save_steps: 100
+plot_loss: true
+overwrite_output_dir: true
+bf16: true
+cache_dir: ./cache
+output_dir: ./saves/llama3-8b/ssrm/fb0.05_ch0.1
+pref_loss: ssrm
+pref_beta: 2.0
+simpo_gamma: 1.0
+report_to: none

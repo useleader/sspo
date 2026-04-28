@@ -1,0 +1,41 @@
+# Gamma Scheduler Ablation: Qwen2 10% fixed gamma=0.5 (Table 4)
+# Disables adaptive scheduling by setting gamma_decay=0
+# n_L=6113, n_U=20786, gamma_min≈0.2273
+model_name_or_path: ./cache/qwen2
+trust_remote_code: true
+stage: dpo
+do_train: true
+finetuning_type: lora
+template: qwen
+dataset: ultra_combined_fb0.10_ch0.1
+dataset_dir: src/data
+cutoff_len: 1024
+max_samples: null
+overwrite_cache: false
+preprocessing_num_workers: 8
+num_train_epochs: 1
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 16
+learning_rate: 5.0e-6
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+lora_rank: 8
+lora_target: all
+val_size: 0.0
+per_device_eval_batch_size: 2
+eval_strategy: 'no'
+logging_steps: 10
+save_steps: 100
+plot_loss: true
+overwrite_output_dir: true
+bf16: true
+cache_dir: ./cache
+output_dir: ./saves/qwen2-7b/sspo/fb0.10_gamma0.5
+pref_loss: sspo
+pref_beta: 10.0
+sspo_gamma_0: 0.5
+sspo_gamma_min: 0.5
+sspo_gamma_decay: 0.0
+sspo_prior: 0.5
+report_to: none
