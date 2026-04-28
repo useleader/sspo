@@ -23,6 +23,13 @@ data/.cache/
 data/toy_*.json
 data/ultra_*.json
 data/ultramedical_*.json
+src/data/*.json
+src/data/*.jsonl
+src/data/toy_*.json
+src/data/ultra_*.json
+src/data/ultramedical_*.json
+src/data/kto_*.json
+src/data/ultrachat_*.json
 processed/
 
 # Cache directories (HuggingFace, models)
