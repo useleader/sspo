@@ -51,14 +51,11 @@ create_dockerfile() {
         cat > "$dockerfile" << 'DOCKERFILE_EOF'
 # SSPO - Semi-Supervised Preference Optimization
 # Base image for 8x H100 Cluster
-FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+# Using Chinese mirror for faster download
+FROM docker.1ms.run/nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV HTTP_PROXY=http://host.docker.internal:6454
-ENV HTTPS_PROXY=http://host.docker.internal:6454
-ENV http_proxy=http://host.docker.internal:6454
-ENV https_proxy=http://host.docker.internal:6454
 
 RUN apt-get update && apt-get install -y \
     python3.10 python3.10-dev python3-pip \
@@ -69,10 +66,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /workspace
 
-# Install PyTorch (CUDA 12.4) - use Chinese mirror
+# Install PyTorch (CUDA 12.4) - use Tsinghua mirror
 RUN pip install --no-cache-dir torch==2.5.1 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 
-# Configure git proxy for GitHub access
+# Configure git proxy for GitHub access (ghproxy.com proxy)
 RUN git config --global url."https://ghproxy.com/".insteadOf "https://github.com/" \
     && git config --global url."https://mirror.ghproxy.com/".insteadOf "https://github.com/"
 
@@ -100,14 +97,11 @@ DOCKERFILE_EOF
         cat > "$dockerfile" << 'DOCKERFILE_EOF'
 # SSPO - Semi-Supervised Preference Optimization
 # Base image for 8x H100 Cluster
-FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+# Using Chinese mirror for faster download
+FROM docker.1ms.run/nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV HTTP_PROXY=http://host.docker.internal:6454
-ENV HTTPS_PROXY=http://host.docker.internal:6454
-ENV http_proxy=http://host.docker.internal:6454
-ENV https_proxy=http://host.docker.internal:6454
 
 RUN apt-get update && apt-get install -y \
     python3.10 python3.10-dev python3-pip \
@@ -118,10 +112,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /workspace
 
-# Install PyTorch (CUDA 12.4) - use Chinese mirror
+# Install PyTorch (CUDA 12.4) - use Tsinghua mirror
 RUN pip install --no-cache-dir torch==2.5.1 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 
-# Configure git proxy for GitHub access
+# Configure git proxy for GitHub access (ghproxy.com proxy)
 RUN git config --global url."https://ghproxy.com/".insteadOf "https://github.com/" \
     && git config --global url."https://mirror.ghproxy.com/".insteadOf "https://github.com/"
 
