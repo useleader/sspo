@@ -35,7 +35,7 @@ show_help() {
 }
 
 check_docker() {
-    if ! command -v docker &> /dev; then
+    if ! command -v docker &> /dev/null; then
         echo "Error: Docker not found. Please install Docker first."
         exit 1
     fi
