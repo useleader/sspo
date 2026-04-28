@@ -35,7 +35,7 @@ show_help() {
 }
 
 check_docker() {
-    if ! command -v docker &> /dev/null; then
+    if ! command -v docker &> /dev; then
         echo "Error: Docker not found. Please install Docker first."
         exit 1
     fi
@@ -44,11 +44,15 @@ check_docker() {
 
 create_dockerfile() {
     local dockerfile="${OUTPUT_DIR}/Dockerfile"
+    local include_cache="${1:-false}"
 
-    cat > "$dockerfile" << 'DOCKERFILE_EOF'
+    if [ "$include_cache" = "true" ]; then
+        # Full mode - include cache
+        cat > "$dockerfile" << 'DOCKERFILE_EOF'
 # SSPO - Semi-Supervised Preference Optimization
 # Base image for 8x H100 Cluster
-FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+# Using Chinese mirror for faster download
+FROM docker.m.daocloud.io/nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -72,20 +76,58 @@ RUN pip install --no-cache-dir -r /workspace/src/requirements.txt
 # Copy source code
 COPY src/src_sspo /workspace/src/src_sspo
 COPY src/data /workspace/src/data
-COPY src/train.py /workspace/src/train.py
 COPY scripts /workspace/scripts
 COPY configs /workspace/configs
 
 ENV PYTHONPATH="/workspace/src/src_sspo:${PYTHONPATH:-}"
 
-# 复制完整数据 (--full 模式)
+# Copy cache for --full mode
 COPY cache /workspace/cache
-COPY data /workspace/data
 
 RUN mkdir -p /workspace/saves /workspace/logs /workspace/results
 
 CMD ["/bin/bash"]
 DOCKERFILE_EOF
+    else
+        # Code-only mode - no cache
+        cat > "$dockerfile" << 'DOCKERFILE_EOF'
+# SSPO - Semi-Supervised Preference Optimization
+# Base image for 8x H100 Cluster
+# Using Chinese mirror for faster download
+FROM docker.m.daocloud.io/nvidia/cuda:12.4.1-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y \
+    python3.10 python3.10-dev python3-pip \
+    git wget curl vim tmux htop \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+WORKDIR /workspace
+
+# Install PyTorch (CUDA 12.4)
+RUN pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+
+# Install Python dependencies
+COPY src/requirements.txt /workspace/src/requirements.txt
+RUN pip install --no-cache-dir -r /workspace/src/requirements.txt
+
+# Copy source code
+COPY src/src_sspo /workspace/src/src_sspo
+COPY src/data /workspace/src/data
+COPY scripts /workspace/scripts
+COPY configs /workspace/configs
+
+ENV PYTHONPATH="/workspace/src/src_sspo:${PYTHONPATH:-}"
+
+RUN mkdir -p /workspace/saves /workspace/logs /workspace/results
+
+CMD ["/bin/bash"]
+DOCKERFILE_EOF
+    fi
 
     echo "Created: $dockerfile"
 }
@@ -136,7 +178,7 @@ package_code_only() {
     echo "=========================================="
 
     mkdir -p "$OUTPUT_DIR"
-    create_dockerfile
+    create_dockerfile "false"
     create_entrypoint
 
     echo ""
@@ -157,14 +199,8 @@ package_full() {
     echo "=========================================="
 
     mkdir -p "$OUTPUT_DIR"
-    create_dockerfile
+    create_dockerfile "true"
     create_entrypoint
-
-    # 复制数据目录
-    if [ -d "cache" ]; then
-        echo "Copying cache data..."
-        cp -r cache "$OUTPUT_DIR/cache"
-    fi
 
     echo ""
     echo "Building Docker image..."
