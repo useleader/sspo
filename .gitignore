@@ -90,6 +90,10 @@ notebooks/
 # Docs (large archives)
 docs/arXiv-2511.00040v3.tar.gz
 
+# Large files
+*.exe
+*.msi
+
 # Docker
 packaged/
 
