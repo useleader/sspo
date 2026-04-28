@@ -20,27 +20,41 @@ data/*.jsonl
 data/*.arrow
 data/*.parquet
 data/.cache/
+data/toy_*.json
+data/ultra_*.json
+data/ultramedical_*.json
 processed/
 
-# Generated configs (can be regenerated)
-configs/
+# Cache directories (HuggingFace, models)
+cache/
+.cache/
+hub/
 
-# Models & Checkpoints
+# Models & Checkpoints (large binary files)
 saves/
 *.bin
 *.safetensors
 *.pt
 *.ckpt
 *.pt.*
+*.pth
+*.h5
+*.onnx
 
 # Logs
+logs/
 logs/*.log
 plots/
 
 # Results
+results/
 results/samples/
 results/*.json
 results/*.csv
+results/alpaca_eval/*
+results/mtbench/*
+!results/alpaca_eval/.gitkeep
+!results/mtbench/.gitkeep
 
 # OS
 .DS_Store
@@ -58,11 +72,6 @@ temp/
 *.tmp
 debug/
 
-# HuggingFace cache
-.cache/
-hub/
-*.h5
-
 # Jupyter
 .ipynb_checkpoints/
 notebooks/
@@ -70,4 +79,13 @@ notebooks/
 # Environment
 .env
 .env.local
+
+# Docs (large archives)
 docs/arXiv-2511.00040v3.tar.gz
+
+# Docker
+packaged/
+
+# OMC sessions (shouldn't be committed)
+.omc/
+.claude/plan/
