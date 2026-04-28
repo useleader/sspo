@@ -69,10 +69,6 @@ WORKDIR /workspace
 # Install PyTorch (CUDA 12.4) - use Tsinghua mirror
 RUN pip install --no-cache-dir torch==2.5.1 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 
-# Configure git proxy for GitHub access (ghproxy.com proxy)
-RUN git config --global url."https://ghproxy.com/".insteadOf "https://github.com/" \
-    && git config --global url."https://mirror.ghproxy.com/".insteadOf "https://github.com/"
-
 # Install Python dependencies
 COPY src/requirements.txt /workspace/src/requirements.txt
 RUN pip install --no-cache-dir -r /workspace/src/requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
@@ -114,10 +110,6 @@ WORKDIR /workspace
 
 # Install PyTorch (CUDA 12.4) - use Tsinghua mirror
 RUN pip install --no-cache-dir torch==2.5.1 -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
-
-# Configure git proxy for GitHub access (ghproxy.com proxy)
-RUN git config --global url."https://ghproxy.com/".insteadOf "https://github.com/" \
-    && git config --global url."https://mirror.ghproxy.com/".insteadOf "https://github.com/"
 
 # Install Python dependencies
 COPY src/requirements.txt /workspace/src/requirements.txt
