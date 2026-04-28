@@ -200,6 +200,10 @@ class RLHFArguments:
         default=3,
         metadata={"help": "The number of SSRM iterations."}
     )
+    ssrm_alpha: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "The weight for SSRM pseudo-label loss in the weighted combination."}
+    )
 
     #! EDIT : add SPA training
     spa_iterations: Optional[int] = field(

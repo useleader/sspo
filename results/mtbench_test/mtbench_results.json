@@ -1,0 +1,21 @@
+{
+  "categories": {
+    "reasoning": 1.8,
+    "math": 1.0,
+    "coding": 1.5,
+    "writing": 1.9,
+    "roleplay": 1.8,
+    "extraction": 1.0,
+    "stem": 1.8,
+    "humanities": 1.0
+  },
+  "average_score": 1.475,
+  "reasoning": 1.8,
+  "math": 1.0,
+  "coding": 1.5,
+  "writing": 1.9,
+  "roleplay": 1.8,
+  "extraction": 1.0,
+  "stem": 1.8,
+  "humanities": 1.0
+}

@@ -140,7 +140,7 @@ def load_model(
         if model_args.mixture_of_depths == "load":
             model = load_mod_pretrained_model(**init_kwargs)
         else:
-            if type(config) in AutoModelForVision2Seq._model_mapping.keys():  # assume built-in models
+            if AutoModelForVision2Seq is not None and type(config) in AutoModelForVision2Seq._model_mapping.keys():  # assume built-in models
                 load_class = AutoModelForVision2Seq
             else:
                 load_class = AutoModelForCausalLM

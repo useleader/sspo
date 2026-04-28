@@ -64,12 +64,27 @@ cd src && pip install -r requirements.txt
 │   └── eval/                     #   Eval tests
 │       └── test_generate_responses.py
 │
-├── configs/                      # Generated YAML configs (gitignored after generation)
+├── configs/                      # Training YAML configs
+│   ├── cluster/                 #   Cluster training configs (by model)
+│   │   ├── llama3-8b/
+│   │   ├── mistral-7b-it/
+│   │   └── qwen2-7b/
+│   ├── local/                    #   Local/debug configs
+│   │   ├── sft_hybrid/
+│   │   ├── ablation_gamma/
+│   │   ├── ablation_prior/
+│   │   └── ...
+│   └── test_*.yaml              #   Test configs
 ├── data/                        # Raw downloaded data
 │   ├── ultrafeedback/           #   UltraFeedback preference dataset
 │   └── ultrachat/               #   UltraChat conversations
 ├── processed/                   # Preprocessed intermediate data
-├── saves/                       # Trained model checkpoints (LoRA weights)
+├── saves/                       # Trained model checkpoints (by model & method)
+│   ├── llama3-8b/             #   Llama-3-8B saves
+│   ├── mistral-7b-it/         #   Mistral-7B saves
+│   ├── qwen2-7b/              #   Qwen2-7B saves
+│   ├── kto/                   #   KTO method saves
+│   └── toy/                   #   Toy experiment saves
 ├── logs/                        # Training logs
 ├── plots/                       # Training visualizations (loss curves)
 ├── results/                     # Evaluation results

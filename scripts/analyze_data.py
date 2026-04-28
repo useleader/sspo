@@ -223,21 +223,21 @@ def main():
     print("=" * 60)
 
     # Analyze UltraFeedback
-    uf_path = Path("data/ultrafeedback/train.json")
+    uf_path = Path("src/data/ultrafeedback/train.json")
     if uf_path.exists():
         uf_data = load_jsonl(uf_path)
         uf_stats = analyze_ultrafeedback(uf_data)
     else:
-        print("\nUltraFeedback not found at data/ultrafeedback/train.json")
+        print("\nUltraFeedback not found at src/data/ultrafeedback/train.json")
         uf_stats = {}
 
     # Analyze UltraChat
-    uc_path = Path("data/ultrachat/train_sft.json")
+    uc_path = Path("src/data/ultrachat/train_sft.json")
     if uc_path.exists():
         uc_data = load_jsonl(uc_path)
         uc_stats = analyze_ultrachat(uc_data)
     else:
-        print("\nUltraChat not found at data/ultrachat/train_sft.json")
+        print("\nUltraChat not found at src/data/ultrachat/train_sft.json")
         uc_stats = {}
 
     # Batch size estimation

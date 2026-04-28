@@ -109,6 +109,7 @@ class CustomDPOTrainer(DPOTrainer):
         self.ssrm_prior = finetuning_args.ssrm_prior
         self.ssrm_threshold = finetuning_args.ssrm_threshold
         self.ssrm_iterations = finetuning_args.ssrm_iterations
+        self.ssrm_alpha = finetuning_args.ssrm_alpha
 
         #! EDIT : SPA hyperparams
         self.spa_iterations = finetuning_args.spa_iterations
@@ -257,7 +258,7 @@ class CustomDPOTrainer(DPOTrainer):
             policy_rejected_logps_adjusted = normalized_policy_rejected_logps - normalized_reference_rejected_logps
             
             logits = self.beta * (policy_chosen_logps_adjusted - policy_rejected_logps_adjusted)
-            pn_loss = -F.logsigmoid(logits)
+            dpo_style_loss = -F.logsigmoid(logits)
             
             if normalized_reference_unlabeled_logps is not None:
                 policy_unlabeled_logps_adjusted = normalized_policy_unlabeled_logps - normalized_reference_unlabeled_logps
@@ -279,7 +280,7 @@ class CustomDPOTrainer(DPOTrainer):
                 final_u_loss = torch.tensor(0.0, device=device, requires_grad=True)
                 u_losses_tensor = torch.tensor([], device=device)
         else:
-            pn_loss = self.simpo_loss(policy_chosen_logps, policy_rejected_logps) if policy_chosen_logps.numel() > 0 or policy_rejected_logps.numel() > 0 else torch.tensor(0.0, device=device, requires_grad=True)
+            dpo_style_loss = self.simpo_loss(policy_chosen_logps, policy_rejected_logps) if policy_chosen_logps.numel() > 0 or policy_rejected_logps.numel() > 0 else torch.tensor(0.0, device=device, requires_grad=True)
             threshold = torch.min(normalized_policy_chosen_logps) if normalized_policy_chosen_logps.numel() > 0 else normalized_policy_unlabeled_logps.mean()
             
             diff = self.beta * (normalized_policy_unlabeled_logps - threshold)
@@ -291,7 +292,7 @@ class CustomDPOTrainer(DPOTrainer):
             u_losses_tensor = torch.where(diff > 0, u_loss_greater, u_loss_less_equal)
             final_u_loss = u_losses_tensor.mean()
         
-        pn_loss_mean = pn_loss.mean() if pn_loss.numel() > 0 else torch.tensor(0.0, device=device, requires_grad=True)
+        pn_loss_mean = dpo_style_loss.mean() if dpo_style_loss.numel() > 0 else torch.tensor(0.0, device=device, requires_grad=True)
         sspo_loss = current_gamma * pn_loss_mean + (1-current_gamma) * final_u_loss
         
         if reference_chosen_logps is not None and reference_rejected_logps is not None:
@@ -305,7 +306,7 @@ class CustomDPOTrainer(DPOTrainer):
             orpo_loss = sft_loss + self.beta * odds_ratio_loss
         
         # logger.info(f"Loss in GPU {torch.cuda.current_device()} = pn_loss: {pn_loss_mean:.4f}, final_u_loss: {final_u_loss:.4f}, sspo_loss: {sspo_loss:.4f}, current_gamma: {current_gamma:.4f}")
-        return sspo_loss, pn_loss, orpo_loss, u_losses_tensor
+        return sspo_loss, dpo_style_loss, orpo_loss, u_losses_tensor
 
     def ssrm_loss(
         self,
@@ -341,8 +342,7 @@ class CustomDPOTrainer(DPOTrainer):
             ssrm_loss = ssrm_loss.mean()
 
             # Weighted combination
-            alpha = 0.1  # Weight for SSRM loss
-            total_loss = dpo_loss + alpha * ssrm_loss
+            total_loss = dpo_loss + self.ssrm_alpha * ssrm_loss
         else:
             total_loss = dpo_loss
 
@@ -375,9 +375,9 @@ class CustomDPOTrainer(DPOTrainer):
                 k = 1
             k = min(k, len(scores))
             top_scores, _ = torch.topk(scores, k=k)
-            # Selection bias correction
-            spa_correction = -top_scores.mean() if top_scores.numel() > 0 else torch.tensor(0.0, device=self.accelerator.device)
-            total_loss = base_loss + spa_correction
+            # Selection bias penalty (subtracted from base_loss)
+            spa_penalty = -top_scores.mean() if top_scores.numel() > 0 else torch.tensor(0.0, device=self.accelerator.device)
+            total_loss = base_loss + spa_penalty
         else:
             total_loss = base_loss
 
@@ -398,7 +398,7 @@ class CustomDPOTrainer(DPOTrainer):
         device = self.accelerator.device
         
         if self.loss_type == "sspo":
-            losses, simpo_losses, orpo_losses, unlabeled_losses = self.sspo_loss(
+            losses, dpo_style_losses, orpo_losses, unlabeled_losses = self.sspo_loss(
                 policy_chosen_logps, 
                 policy_rejected_logps, 
                 policy_unlabeled_logps,
@@ -410,7 +410,7 @@ class CustomDPOTrainer(DPOTrainer):
             rejected_rewards = self.beta * policy_rejected_logps.to(device)
             unlabeled_rewards = self.beta * policy_unlabeled_logps.to(device)
             
-            return losses, simpo_losses, orpo_losses, unlabeled_losses, chosen_rewards, rejected_rewards, unlabeled_rewards
+            return losses, dpo_style_losses, orpo_losses, unlabeled_losses, chosen_rewards, rejected_rewards, unlabeled_rewards
         elif not self.finetuning_args.use_ref_model:
             if self.loss_type == "orpo":
                 losses = self.odds_ratio_loss(policy_chosen_logps, policy_rejected_logps)
@@ -451,8 +451,10 @@ class CustomDPOTrainer(DPOTrainer):
         num_chosen = batch['num_chosen'].item() if 'num_chosen' in batch else 0
         num_rejected = batch['num_rejected'].item() if 'num_rejected' in batch else 0
         num_unlabeled = batch['num_unlabeled'].item() if 'num_unlabeled' in batch else 0
-        
-        all_logits: "torch.Tensor" = model(**batch, return_dict=True, use_cache=False).logits.to(torch.float32)
+
+        # Remove metadata fields before forwarding to model
+        batch_for_model = {k: v for k, v in batch.items() if k not in ('num_chosen', 'num_rejected', 'num_unlabeled')}
+        all_logits: "torch.Tensor" = model(**batch_for_model, return_dict=True, use_cache=False).logits.to(torch.float32)
         all_logps, valid_length = get_batch_logps(logits=all_logits, labels=batch["labels"])
         
         if self.loss_type in ["ipo", "orpo", "simpo", "sspo"]:
@@ -554,7 +556,7 @@ class CustomDPOTrainer(DPOTrainer):
             
             reference_chosen_logps, reference_rejected_logps, reference_unlabeled_logps = self.compute_reference_log_probs(model, batch)
 
-            losses, simpo_losses, orpo_losses, unlabeled_losses, chosen_rewards, rejected_rewards, unlabeled_rewards = self.compute_preference_loss(
+            losses, dpo_style_losses, orpo_losses, unlabeled_losses, chosen_rewards, rejected_rewards, unlabeled_rewards = self.compute_preference_loss(
                 policy_chosen_logps,
                 policy_rejected_logps,
                 policy_unlabeled_logps,
@@ -579,7 +581,7 @@ class CustomDPOTrainer(DPOTrainer):
             metrics[f"{prefix}logits/rejected"] = policy_rejected_logits.mean().item() if policy_rejected_logits.numel() > 0 else 0.0   
             metrics[f"{prefix}logits/unlabeled"] = policy_unlabeled_logits.mean().item() if policy_unlabeled_logits.numel() > 0 else 0.0
             metrics[f"{prefix}orpo_loss"] = orpo_losses.mean().item() if chosen_rewards.numel() > 0 and rejected_rewards.numel() > 0 else 0.0
-            metrics[f"{prefix}simpo_loss"] = simpo_losses.mean().item() if chosen_rewards.numel() > 0 and rejected_rewards.numel() > 0 else 0.0
+            metrics[f"{prefix}dpo_style_loss"] = dpo_style_losses.mean().item() if chosen_rewards.numel() > 0 and rejected_rewards.numel() > 0 else 0.0
             metrics[f"{prefix}unlabeled_loss"] = unlabeled_losses.mean().item() if unlabeled_rewards.numel() > 0 else 0.0
 
             t = self.state.global_step
@@ -591,7 +593,7 @@ class CustomDPOTrainer(DPOTrainer):
             # R_D_L = gamma * pn_loss / total_loss
             # R_D_U = (1-gamma) * u_loss / total_loss
             if losses.item() > 0:
-                labeled_contrib = current_gamma * simpo_losses.mean().item() / losses.item()
+                labeled_contrib = current_gamma * dpo_style_losses.mean().item() / losses.item()
                 unlabeled_contrib = (1 - current_gamma) * unlabeled_losses.mean().item() / losses.item()
                 metrics[f"{prefix}sspo/loss_contrib_labeled"] = labeled_contrib
                 metrics[f"{prefix}sspo/loss_contrib_unlabeled"] = unlabeled_contrib

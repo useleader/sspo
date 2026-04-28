@@ -34,8 +34,7 @@ saves/
 *.pt.*
 
 # Logs
-logs/
-*.log
+logs/*.log
 plots/
 
 # Results

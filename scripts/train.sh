@@ -64,18 +64,10 @@ mkdir -p logs
 
 # Setup for cluster or local
 if [ "$LOCAL" = "1" ]; then
-    # Local single-GPU training
+    # Local single-GPU training - use python directly to avoid torchrun argument issues
     echo "Starting local training (1 GPU)..."
 
-    NNODES=1
-    NPROC_PER_NODE=1
-
-    torchrun \
-        --nnodes=$NNODES \
-        --nproc_per_node=$NPROC_PER_NODE \
-        --master_port=$MASTER_PORT \
-        src/src_sspo/train.py \
-        --config "$CONFIG_FILE"
+    DISABLE_VERSION_CHECK=1 PYTHONPATH="src/src_sspo:${PYTHONPATH:-}" python src/src_sspo/train.py "$CONFIG_FILE"
 else
     # Cluster multi-GPU training
     if [ -n "${SLURM_JOB_ID:-}" ]; then

@@ -785,12 +785,13 @@
     }
   },
   "ultra_paired_fb1.0": {
-    "hf_hub_url": "llamafactory/ultrafeedback_binarized",
+    "file_name": "./ultra_paired_fb1.0.json",
     "ranking": true,
     "columns": {
       "prompt": "instruction",
       "chosen": "chosen",
-      "rejected": "rejected"
+      "rejected": "rejected",
+      "unlabeled": "unlabeled"
     }
   },
   "ultra_sft_100": {
@@ -808,6 +809,16 @@
       "prompt": "instruction",
       "chosen": "chosen",
       "rejected": "rejected"
+    }
+  },
+  "ultra_combined_fb1.0_ch0.1": {
+    "file_name": "./ultra_combined_fb1.0_ch0.1.json",
+    "ranking": true,
+    "columns": {
+      "prompt": "instruction",
+      "chosen": "chosen",
+      "rejected": "rejected",
+      "unlabeled": "unlabeled"
     }
   }
 }
